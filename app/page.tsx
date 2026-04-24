@@ -79,11 +79,13 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div>
-                <h3 className="font-display text-4xl leading-[0.95] md:text-5xl">
+              <div className="min-w-0">
+                <h3 className="break-words font-display text-4xl leading-[0.95] md:text-3xl lg:text-5xl">
                   {title.toUpperCase()}
                 </h3>
-                <p className="mt-2 font-mono text-sm md:text-base">{subtitle}</p>
+                <p className="mt-2 font-mono text-sm md:text-xs lg:text-base">
+                  {subtitle}
+                </p>
 
                 <div className="mt-6 inline-flex items-center gap-2 border-[3px] border-foreground bg-background px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground">
                   Enter
