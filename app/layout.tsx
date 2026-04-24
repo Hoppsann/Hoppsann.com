@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Archivo_Black, Space_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
+import { AdminSequenceListener } from "@/components/admin/admin-sequence-listener"
 import { SiteNav } from "@/components/site-nav"
 import { SiteFooter } from "@/components/site-footer"
 
@@ -46,6 +47,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${archivoBlack.variable} ${spaceMono.variable} bg-background`}>
       <body className="font-mono antialiased text-foreground min-h-screen flex flex-col">
+        <AdminSequenceListener />
         <SiteNav />
         <main className="flex-1">{children}</main>
         <SiteFooter />

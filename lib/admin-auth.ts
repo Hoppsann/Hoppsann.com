@@ -4,6 +4,8 @@ import { createHash, timingSafeEqual } from "crypto"
 import { cookies } from "next/headers"
 
 export const ADMIN_COOKIE_NAME = "hoppsann-admin-session"
+export const ADMIN_PASSWORD_COOKIE_NAME = "hoppsann-admin-password"
+export const ADMIN_PASSKEY_CHALLENGE_COOKIE_NAME = "hoppsann-admin-passkey-challenge"
 const SESSION_SALT = "hoppsann-admin-session"
 const FALLBACK_ADMIN_CODE = "hoppsann-admin"
 
@@ -28,6 +30,12 @@ export function getAdminSessionValue() {
     .digest("hex")
 }
 
+export function getAdminPasswordVerificationValue() {
+  return createHash("sha256")
+    .update(`${SESSION_SALT}:password:${getAdminAccessCode()}`)
+    .digest("hex")
+}
+
 export function getAdminSessionCookieOptions(secure = process.env.NODE_ENV === "production") {
   return {
     httpOnly: true,
@@ -35,6 +43,28 @@ export function getAdminSessionCookieOptions(secure = process.env.NODE_ENV === "
     secure,
     path: "/",
     maxAge: 60 * 60 * 12,
+  }
+}
+
+export function getAdminPasswordCookieOptions(secure = process.env.NODE_ENV === "production") {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure,
+    path: "/",
+    maxAge: 60 * 10,
+  }
+}
+
+export function getAdminPasskeyChallengeCookieOptions(
+  secure = process.env.NODE_ENV === "production",
+) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure,
+    path: "/",
+    maxAge: 60 * 5,
   }
 }
 
@@ -56,4 +86,15 @@ export async function isAdminAuthenticated() {
   }
 
   return safeCompare(sessionCookie, getAdminSessionValue())
+}
+
+export async function isAdminPasswordVerified() {
+  const cookieStore = await cookies()
+  const passwordCookie = cookieStore.get(ADMIN_PASSWORD_COOKIE_NAME)?.value
+
+  if (!passwordCookie) {
+    return false
+  }
+
+  return safeCompare(passwordCookie, getAdminPasswordVerificationValue())
 }

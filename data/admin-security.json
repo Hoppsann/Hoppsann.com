@@ -1,0 +1,19 @@
+{
+  "webauthnUserID": "SO69KsMEMMftE6qiRYBPgQ60oxSDTRZU7WC_lgtVjlI",
+  "passkeys": [
+    {
+      "id": "3US2PqjI4hWTxIiEEGpvq64GKsYbxpIn0-NFApf2iV0",
+      "publicKey": "pQECAyYgASFYIDKjYku5gEuxto4vfuokM-W0x4H0iUCunKhgNunpN9_bIlgg4YbKHMU92fKl7_X8nDLhuz15WD8XeIzU9fPLG_f3n-A",
+      "counter": 0,
+      "webauthnUserID": "SO69KsMEMMftE6qiRYBPgQ60oxSDTRZU7WC_lgtVjlI",
+      "deviceType": "multiDevice",
+      "backedUp": true,
+      "transports": [
+        "hybrid",
+        "internal"
+      ],
+      "createdAt": "2026-04-24T20:44:56.813Z",
+      "lastUsedAt": "2026-04-24T20:48:17.978Z"
+    }
+  ]
+}

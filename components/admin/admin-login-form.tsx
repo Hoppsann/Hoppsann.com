@@ -65,7 +65,7 @@ export function AdminLoginForm() {
         <div>
           <p className="font-display text-3xl leading-none">ADMIN ACCESS</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            Enter the code to unlock uploads and content management.
+            Enter the password to unlock uploads and content management.
           </p>
         </div>
       </div>
@@ -73,14 +73,14 @@ export function AdminLoginForm() {
       <form onSubmit={handleSubmit} className="mt-8 space-y-4">
         <div className="space-y-2">
           <label htmlFor="admin-code" className="font-display text-xs uppercase tracking-[0.2em]">
-            Access code
+            Password
           </label>
           <Input
             id="admin-code"
             name="code"
             type="password"
             autoComplete="current-password"
-            placeholder="Enter code"
+            placeholder="Enter password"
             className="h-12 rounded-xl border-[3px] border-foreground bg-background px-4 font-mono shadow-brutal-sm"
           />
         </div>
@@ -107,7 +107,7 @@ export function AdminLoginForm() {
       </form>
 
       <p className="mt-6 text-sm text-muted-foreground">
-        The code is read from the server-side <code>ADMIN_ACCESS_CODE</code> value.
+        The password is read from the server-side <code>ADMIN_ACCESS_CODE</code> value.
       </p>
     </section>
   )

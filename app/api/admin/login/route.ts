@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server"
 import {
   ADMIN_COOKIE_NAME,
+  ADMIN_PASSKEY_CHALLENGE_COOKIE_NAME,
+  ADMIN_PASSWORD_COOKIE_NAME,
+  getAdminPasskeyChallengeCookieOptions,
+  getAdminPasswordCookieOptions,
+  getAdminPasswordVerificationValue,
   getAdminSessionCookieOptions,
-  getAdminSessionValue,
   isAdminCodeValid,
 } from "@/lib/admin-auth"
+import { hasAdminPasskeys } from "@/lib/admin-passkeys"
 
 function getTextValue(formData: FormData, key: string) {
   const value = formData.get(key)
@@ -36,16 +41,25 @@ export async function POST(request: Request) {
     )
   }
 
+  const hasPasskeys = await hasAdminPasskeys()
+
   const response = NextResponse.json({
     ok: true,
-    message: "Admin unlocked.",
+    message: hasPasskeys
+      ? "Password accepted. Approve the login with your passkey."
+      : "Password accepted. Set up your passkey to finish securing admin access.",
+    step: hasPasskeys ? "verify-passkey" : "setup-passkey",
   })
 
-  response.cookies.set(
-    ADMIN_COOKIE_NAME,
-    getAdminSessionValue(),
-    getAdminSessionCookieOptions(isHttps),
-  )
+  response.cookies.set(ADMIN_PASSWORD_COOKIE_NAME, getAdminPasswordVerificationValue(), getAdminPasswordCookieOptions(isHttps))
+  response.cookies.set(ADMIN_COOKIE_NAME, "", {
+    ...getAdminSessionCookieOptions(isHttps),
+    maxAge: 0,
+  })
+  response.cookies.set(ADMIN_PASSKEY_CHALLENGE_COOKIE_NAME, "", {
+    ...getAdminPasskeyChallengeCookieOptions(isHttps),
+    maxAge: 0,
+  })
 
   return response
 }
