@@ -80,10 +80,10 @@ export default function HomePage() {
               </div>
 
               <div className="min-w-0">
-                <h3 className="break-words font-display text-4xl leading-[0.95] md:text-3xl lg:text-5xl">
+                <h3 className="font-display text-3xl leading-[0.95] md:text-2xl lg:text-4xl xl:text-5xl">
                   {title.toUpperCase()}
                 </h3>
-                <p className="mt-2 font-mono text-sm md:text-xs lg:text-base">
+                <p className="mt-2 font-mono text-sm md:text-[11px] lg:text-sm xl:text-base">
                   {subtitle}
                 </p>
 
