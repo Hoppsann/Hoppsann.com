@@ -37,7 +37,7 @@ export function SiteNav() {
                   <Link
                     href={l.href}
                     className={cn(
-                      "inline-flex items-center border-[3px] border-foreground px-4 py-2 font-display text-sm uppercase tracking-wider",
+                      "inline-flex items-center rounded-md border-[3px] border-foreground px-4 py-2 font-display text-sm uppercase tracking-wider",
                       "shadow-brutal-sm shadow-brutal-hover bg-background",
                       active && "bg-secondary",
                     )}
@@ -51,7 +51,7 @@ export function SiteNav() {
         </nav>
 
         <button
-          className="md:hidden border-[3px] border-foreground bg-secondary p-2 shadow-brutal-sm"
+          className="md:hidden rounded-md border-[3px] border-foreground bg-secondary p-2 shadow-brutal-sm"
           onClick={() => setOpen((v) => !v)}
           aria-label="Toggle menu"
           aria-expanded={open}

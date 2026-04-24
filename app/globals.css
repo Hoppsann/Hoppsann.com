@@ -40,7 +40,7 @@
   --input: #0a0a0a;
   --ring: #0a0a0a;
 
-  --radius: 0rem;
+  --radius: 0.625rem;
 
   --shadow-brutal: 3px 4px 10px 0 rgba(10, 10, 10, 0.18);
   --shadow-brutal-sm: 2px 2px 6px 0 rgba(10, 10, 10, 0.14);
@@ -73,10 +73,10 @@
   --color-ring: var(--ring);
   --color-brand-cyan: var(--brand-cyan);
 
-  --radius-sm: 0rem;
-  --radius-md: 0rem;
-  --radius-lg: 0rem;
-  --radius-xl: 0rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
 }
 
 @layer base {

@@ -119,7 +119,7 @@ export function VideoGallery() {
           <button
             key={v.id}
             onClick={() => setActive(v)}
-            className="group flex flex-col border-brutal-thick bg-background text-left shadow-brutal shadow-brutal-hover"
+            className="group flex flex-col overflow-hidden rounded-2xl border-brutal-thick bg-background text-left shadow-brutal shadow-brutal-hover"
             aria-label={`Play ${v.title}`}
           >
             <div className="relative aspect-video w-full overflow-hidden border-b-[3px] border-foreground">
@@ -133,14 +133,14 @@ export function VideoGallery() {
               <div className="absolute inset-0 flex items-center justify-center bg-foreground/20 transition-colors group-hover:bg-foreground/10">
                 <span
                   className={cn(
-                    "grid size-16 place-items-center border-[4px] border-foreground shadow-brutal-sm transition-transform group-hover:-translate-x-0.5 group-hover:-translate-y-0.5",
+                    "grid size-16 place-items-center rounded-full border-[4px] border-foreground shadow-brutal-sm transition-transform group-hover:-translate-x-0.5 group-hover:-translate-y-0.5",
                     accentMap[v.accent],
                   )}
                 >
                   <Play className="size-6" fill="currentColor" aria-hidden="true" />
                 </span>
               </div>
-              <span className="absolute right-2 top-2 border-[3px] border-foreground bg-background px-2 py-0.5 font-mono text-xs">
+              <span className="absolute right-2 top-2 rounded-md border-[3px] border-foreground bg-background px-2 py-0.5 font-mono text-xs">
                 {v.duration}
               </span>
             </div>
@@ -150,7 +150,7 @@ export function VideoGallery() {
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
-                      "border-[2px] border-foreground px-2 py-0.5 font-display text-[10px] uppercase tracking-wider",
+                      "rounded-sm border-[2px] border-foreground px-2 py-0.5 font-display text-[10px] uppercase tracking-wider",
                       accentMap[v.accent],
                     )}
                   >
@@ -181,14 +181,14 @@ export function VideoGallery() {
           onClick={() => setActive(null)}
         >
           <div
-            className="relative w-full max-w-5xl border-brutal-thick bg-background shadow-brutal-lg"
+            className="relative w-full max-w-5xl overflow-hidden rounded-2xl border-brutal-thick bg-background shadow-brutal-lg"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b-[3px] border-foreground px-4 py-3">
               <div className="flex min-w-0 items-center gap-3">
                 <span
                   className={cn(
-                    "shrink-0 border-[2px] border-foreground px-2 py-0.5 font-display text-[10px] uppercase tracking-wider",
+                    "shrink-0 rounded-sm border-[2px] border-foreground px-2 py-0.5 font-display text-[10px] uppercase tracking-wider",
                     accentMap[active.accent],
                   )}
                 >
@@ -201,7 +201,7 @@ export function VideoGallery() {
               <button
                 onClick={() => setActive(null)}
                 aria-label="Close video"
-                className="grid size-10 shrink-0 place-items-center border-[3px] border-foreground bg-accent shadow-brutal-sm transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5"
+                className="grid size-10 shrink-0 place-items-center rounded-md border-[3px] border-foreground bg-accent shadow-brutal-sm transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5"
               >
                 <X className="size-5" />
               </button>

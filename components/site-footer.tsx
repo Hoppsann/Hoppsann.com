@@ -14,7 +14,7 @@ export function SiteFooter() {
           <li>
             <Link
               href="/photography"
-              className="inline-block border-[3px] border-background bg-accent px-3 py-2 font-display text-xs uppercase tracking-wider text-accent-foreground"
+              className="inline-block rounded-md border-[3px] border-background bg-accent px-3 py-2 font-display text-xs uppercase tracking-wider text-accent-foreground"
             >
               Photography
             </Link>
@@ -22,7 +22,7 @@ export function SiteFooter() {
           <li>
             <Link
               href="/videography"
-              className="inline-block border-[3px] border-background bg-secondary px-3 py-2 font-display text-xs uppercase tracking-wider text-secondary-foreground"
+              className="inline-block rounded-md border-[3px] border-background bg-secondary px-3 py-2 font-display text-xs uppercase tracking-wider text-secondary-foreground"
             >
               Videography
             </Link>
@@ -30,7 +30,7 @@ export function SiteFooter() {
           <li>
             <Link
               href="/it"
-              className="inline-block border-[3px] border-background bg-[color:var(--brand-cyan)] px-3 py-2 font-display text-xs uppercase tracking-wider text-foreground"
+              className="inline-block rounded-md border-[3px] border-background bg-[color:var(--brand-cyan)] px-3 py-2 font-display text-xs uppercase tracking-wider text-foreground"
             >
               IT
             </Link>

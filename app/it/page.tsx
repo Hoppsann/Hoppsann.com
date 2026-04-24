@@ -104,13 +104,13 @@ export default function ITPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 md:px-8 md:py-14">
       <header className="mb-10 md:mb-14">
-        <p className="inline-block border-[3px] border-foreground bg-[color:var(--brand-cyan)] px-3 py-1 font-display text-xs uppercase tracking-widest shadow-brutal-sm">
+        <p className="inline-block rounded-md border-[3px] border-foreground bg-[color:var(--brand-cyan)] px-3 py-1 font-display text-xs uppercase tracking-widest shadow-brutal-sm">
           03 / IT &amp; Code
         </p>
         <h1 className="mt-4 font-display text-5xl leading-[0.95] tracking-tight md:text-7xl">
           I BUILD
           <br />
-          <span className="inline-block bg-foreground px-3 py-1 text-background">
+          <span className="inline-block rounded-lg bg-foreground px-3 py-1 text-background">
             ON THE WEB.
           </span>
         </h1>
@@ -118,7 +118,7 @@ export default function ITPage() {
 
       {/* About blurb */}
       <section className="mb-12 grid grid-cols-1 gap-6 md:mb-16 md:grid-cols-3 md:gap-8">
-        <div className="border-brutal bg-background p-6 shadow-brutal-sm md:col-span-2">
+        <div className="rounded-xl border-brutal bg-background p-6 shadow-brutal-sm md:col-span-2">
           <h2 className="font-display text-2xl md:text-3xl">ABOUT MY WORK</h2>
           <p className="mt-3 text-pretty leading-relaxed">
             I build opinionated web apps — mostly with TypeScript, React and
@@ -133,7 +133,7 @@ export default function ITPage() {
             side project just for fun.
           </p>
         </div>
-        <aside className="border-brutal bg-foreground p-6 text-background shadow-brutal-sm">
+        <aside className="rounded-xl border-brutal bg-foreground p-6 text-background shadow-brutal-sm">
           <p className="font-mono text-xs uppercase tracking-widest opacity-70">
             Available for
           </p>
@@ -144,7 +144,7 @@ export default function ITPage() {
           </ul>
           <Link
             href="mailto:hello@hoppsann.com"
-            className="mt-5 inline-flex items-center gap-2 border-[3px] border-background bg-[color:var(--brand-cyan)] px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground"
+            className="mt-5 inline-flex items-center gap-2 rounded-md border-[3px] border-background bg-[color:var(--brand-cyan)] px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground"
           >
             Get in touch
             <ArrowUpRight className="size-4" aria-hidden="true" />
@@ -162,18 +162,18 @@ export default function ITPage() {
             {skills.length} / Tech
           </span>
         </div>
-        <div className="border-brutal bg-background p-4 shadow-brutal-sm md:p-6">
+        <div className="rounded-xl border-brutal bg-background p-4 shadow-brutal-sm md:p-6">
           <ul className="flex flex-wrap gap-3">
             {skills.map((s) => (
               <li
                 key={s.name}
                 className={cn(
-                  "inline-flex items-center gap-2 border-[3px] border-foreground px-3 py-2 font-display text-sm uppercase tracking-wider shadow-brutal-sm",
+                  "inline-flex items-center gap-2 rounded-md border-[3px] border-foreground px-3 py-2 font-display text-sm uppercase tracking-wider shadow-brutal-sm",
                   levelStyles[s.level],
                 )}
               >
                 {s.name}
-                <span className="border-[2px] border-foreground bg-background px-1.5 py-0.5 font-mono text-[10px] text-foreground">
+                <span className="rounded-sm border-[2px] border-foreground bg-background px-1.5 py-0.5 font-mono text-[10px] text-foreground">
                   {s.level}
                 </span>
               </li>
@@ -198,7 +198,7 @@ export default function ITPage() {
             <article
               key={p.title}
               className={cn(
-                "flex flex-col justify-between border-brutal-thick p-6 shadow-brutal shadow-brutal-hover md:p-7",
+                "flex flex-col justify-between rounded-2xl border-brutal-thick p-6 shadow-brutal shadow-brutal-hover md:p-7",
                 cardColorMap[p.color],
               )}
             >
@@ -212,7 +212,7 @@ export default function ITPage() {
                   {p.stack.map((t) => (
                     <li
                       key={t}
-                      className="border-[2px] border-foreground bg-background px-2 py-1 font-mono text-xs text-foreground"
+                      className="rounded-sm border-[2px] border-foreground bg-background px-2 py-1 font-mono text-xs text-foreground"
                     >
                       {t}
                     </li>
@@ -224,7 +224,7 @@ export default function ITPage() {
                 {p.live && (
                   <Link
                     href={p.live}
-                    className="inline-flex items-center gap-2 border-[3px] border-foreground bg-background px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground shadow-brutal-sm"
+                    className="inline-flex items-center gap-2 rounded-md border-[3px] border-foreground bg-background px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground shadow-brutal-sm"
                   >
                     Live
                     <ExternalLink className="size-4" aria-hidden="true" />
@@ -233,7 +233,7 @@ export default function ITPage() {
                 {p.repo && (
                   <Link
                     href={p.repo}
-                    className="inline-flex items-center gap-2 border-[3px] border-foreground bg-background px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground shadow-brutal-sm"
+                    className="inline-flex items-center gap-2 rounded-md border-[3px] border-foreground bg-background px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground shadow-brutal-sm"
                   >
                     Code
                     <Github className="size-4" aria-hidden="true" />

@@ -36,13 +36,13 @@ export default function HomePage() {
     <div className="mx-auto max-w-7xl px-4 py-10 md:px-8 md:py-16">
       {/* Hero */}
       <section className="mb-12 md:mb-16">
-        <div className="inline-block border-[3px] border-foreground bg-secondary px-3 py-1 font-display text-xs uppercase tracking-widest shadow-brutal-sm">
+        <div className="inline-block rounded-md border-[3px] border-foreground bg-secondary px-3 py-1 font-display text-xs uppercase tracking-widest shadow-brutal-sm">
           Portfolio / 2026
         </div>
         <h1 className="mt-4 font-display text-5xl leading-[0.95] tracking-tight md:text-7xl lg:text-8xl">
           HELLO, I&apos;M
           <br />
-          <span className="inline-block bg-foreground px-3 py-1 text-background">
+          <span className="inline-block rounded-lg bg-foreground px-3 py-1 text-background">
             HOPPSANN
           </span>
         </h1>
@@ -68,13 +68,13 @@ export default function HomePage() {
             <Link
               key={href}
               href={href}
-              className={`group relative flex min-h-[320px] flex-col justify-between border-brutal-thick ${bg} ${text} p-6 shadow-brutal shadow-brutal-hover md:min-h-[420px] md:p-8`}
+              className={`group relative flex min-h-[320px] flex-col justify-between rounded-2xl border-brutal-thick ${bg} ${text} p-6 shadow-brutal shadow-brutal-hover md:min-h-[420px] md:p-8`}
             >
               <div className="flex items-start justify-between">
                 <span className="font-mono text-xs uppercase tracking-widest">
                   / {tag}
                 </span>
-                <div className="grid size-12 place-items-center border-[3px] border-foreground bg-background text-foreground md:size-14">
+                <div className="grid size-12 place-items-center rounded-lg border-[3px] border-foreground bg-background text-foreground md:size-14">
                   <Icon className="size-6 md:size-7" aria-hidden="true" />
                 </div>
               </div>
@@ -87,7 +87,7 @@ export default function HomePage() {
                   {subtitle}
                 </p>
 
-                <div className="mt-6 inline-flex items-center gap-2 border-[3px] border-foreground bg-background px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground">
+                <div className="mt-6 inline-flex items-center gap-2 rounded-md border-[3px] border-foreground bg-background px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground">
                   Enter
                   <ArrowUpRight
                     className="size-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
@@ -102,7 +102,7 @@ export default function HomePage() {
 
       {/* Mini about strip */}
       <section className="mt-16 grid grid-cols-1 gap-6 md:mt-24 md:grid-cols-3 md:gap-8">
-        <div className="border-brutal bg-background p-6 shadow-brutal-sm md:col-span-2">
+        <div className="rounded-xl border-brutal bg-background p-6 shadow-brutal-sm md:col-span-2">
           <h2 className="font-display text-2xl md:text-3xl">WHY THIS SITE?</h2>
           <p className="mt-3 text-pretty leading-relaxed">
             Because portfolios shouldn&apos;t whisper. This is a collection of
@@ -110,7 +110,7 @@ export default function HomePage() {
             something catches your eye — reach out.
           </p>
         </div>
-        <div className="border-brutal bg-foreground p-6 text-background shadow-brutal-sm">
+        <div className="rounded-xl border-brutal bg-foreground p-6 text-background shadow-brutal-sm">
           <p className="font-mono text-xs uppercase tracking-widest opacity-70">
             Let&apos;s talk
           </p>

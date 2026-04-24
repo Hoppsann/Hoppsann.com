@@ -170,7 +170,7 @@ export function PhotoGallery() {
       <div
         role="tablist"
         aria-label="Photo categories"
-        className="mb-8 flex flex-wrap gap-3 border-brutal bg-background p-3 shadow-brutal-sm"
+        className="mb-8 flex flex-wrap gap-3 rounded-xl border-brutal bg-background p-3 shadow-brutal-sm"
       >
         {categories.map((cat) => {
           const isActive = active === cat
@@ -181,7 +181,7 @@ export function PhotoGallery() {
               aria-selected={isActive}
               onClick={() => setActive(cat)}
               className={cn(
-                "inline-flex items-center border-[3px] border-foreground px-4 py-2 font-display text-sm uppercase tracking-wider shadow-brutal-sm transition-transform",
+                "inline-flex items-center rounded-md border-[3px] border-foreground px-4 py-2 font-display text-sm uppercase tracking-wider shadow-brutal-sm transition-transform",
                 "hover:-translate-x-0.5 hover:-translate-y-0.5",
                 isActive ? "bg-foreground text-background" : "bg-background text-foreground",
               )}
@@ -189,7 +189,7 @@ export function PhotoGallery() {
               {cat}
               <span
                 className={cn(
-                  "ml-2 inline-block border-[2px] border-current px-1.5 text-[10px]",
+                  "ml-2 inline-block rounded-sm border-[2px] border-current px-1.5 text-[10px]",
                   isActive ? "bg-background text-foreground" : "bg-foreground text-background",
                 )}
               >
@@ -205,7 +205,7 @@ export function PhotoGallery() {
         {filtered.map((p) => (
           <figure
             key={p.id}
-            className="mb-4 break-inside-avoid border-brutal bg-background shadow-brutal-sm transition-transform duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:[box-shadow:8px_8px_0_0_var(--foreground)] md:mb-6"
+            className="mb-4 break-inside-avoid overflow-hidden rounded-xl border-brutal bg-background shadow-brutal-sm transition-transform duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-brutal md:mb-6"
           >
             <div className="relative w-full" style={{ aspectRatio: `${p.width} / ${p.height}` }}>
               <Image
@@ -220,7 +220,7 @@ export function PhotoGallery() {
               <span className="truncate font-mono text-xs">{p.alt}</span>
               <span
                 className={cn(
-                  "ml-2 shrink-0 border-[2px] border-foreground px-2 py-0.5 font-display text-[10px] uppercase tracking-wider",
+                  "ml-2 shrink-0 rounded-sm border-[2px] border-foreground px-2 py-0.5 font-display text-[10px] uppercase tracking-wider",
                   categoryColors[p.category],
                 )}
               >
@@ -232,7 +232,7 @@ export function PhotoGallery() {
       </div>
 
       {filtered.length === 0 && (
-        <div className="border-brutal bg-background p-10 text-center shadow-brutal-sm">
+        <div className="rounded-xl border-brutal bg-background p-10 text-center shadow-brutal-sm">
           <p className="font-display text-2xl">NO PHOTOS HERE YET.</p>
           <p className="mt-2 font-mono text-sm text-muted-foreground">
             Try another category.
