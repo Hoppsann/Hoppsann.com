@@ -1,11 +1,16 @@
 import { PhotoGallery } from "@/components/photo-gallery"
+import { getPortfolioContent } from "@/lib/portfolio-store"
+
+export const dynamic = "force-dynamic"
 
 export const metadata = {
   title: "Photography — Hoppsann",
   description: "A masonry gallery of photographs by Hoppsann.",
 }
 
-export default function PhotographyPage() {
+export default async function PhotographyPage() {
+  const content = await getPortfolioContent()
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 md:px-8 md:py-14">
       <header className="mb-8 md:mb-12">
@@ -20,12 +25,12 @@ export default function PhotographyPage() {
           </span>
         </h1>
         <p className="mt-4 max-w-2xl text-pretty leading-relaxed">
-          A curated masonry wall of photographs. Filter by category to see
-          exactly what you want.
+          A curated masonry wall of photographs. Filter by custom tags to jump
+          straight to the work you want.
         </p>
       </header>
 
-      <PhotoGallery />
+      <PhotoGallery photos={content.photos} />
     </div>
   )
 }

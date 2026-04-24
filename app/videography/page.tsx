@@ -1,11 +1,16 @@
 import { VideoGallery } from "@/components/video-gallery"
+import { getPortfolioContent } from "@/lib/portfolio-store"
+
+export const dynamic = "force-dynamic"
 
 export const metadata = {
   title: "Videography — Hoppsann",
   description: "Video work by Hoppsann — click any thumbnail to play.",
 }
 
-export default function VideographyPage() {
+export default async function VideographyPage() {
+  const content = await getPortfolioContent()
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 md:px-8 md:py-14">
       <header className="mb-8 md:mb-12">
@@ -21,11 +26,11 @@ export default function VideographyPage() {
         </h1>
         <p className="mt-4 max-w-2xl text-pretty leading-relaxed">
           Short films, music videos, commercial cuts, and experiments. Click a
-          tile to play.
+          tile to play, or use filters to narrow the reel.
         </p>
       </header>
 
-      <VideoGallery />
+      <VideoGallery videos={content.videos} />
     </div>
   )
 }

@@ -1,6 +1,10 @@
 import Link from "next/link"
-import { ArrowUpRight, Github, ExternalLink } from "lucide-react"
+import { ArrowUpRight } from "lucide-react"
+import { RepositoryGallery } from "@/components/repository-gallery"
 import { cn } from "@/lib/utils"
+import { getPortfolioContent } from "@/lib/portfolio-store"
+
+export const dynamic = "force-dynamic"
 
 export const metadata = {
   title: "IT — Hoppsann",
@@ -30,77 +34,9 @@ const levelStyles: Record<Skill["level"], string> = {
   Comfortable: "bg-[color:var(--brand-cyan)] text-foreground",
 }
 
-type Project = {
-  title: string
-  description: string
-  stack: string[]
-  live?: string
-  repo?: string
-  color: "yellow" | "pink" | "cyan" | "black"
-}
+export default async function ITPage() {
+  const content = await getPortfolioContent()
 
-const projects: Project[] = [
-  {
-    title: "Pixel Market",
-    description:
-      "An indie-friendly marketplace for pixel artists. Custom auth, Stripe payouts, and a CMS built from scratch.",
-    stack: ["Next.js", "TypeScript", "Postgres", "Stripe"],
-    live: "#",
-    repo: "#",
-    color: "pink",
-  },
-  {
-    title: "Bleep Radio",
-    description:
-      "A weird little web radio that streams community-uploaded loops with a visualizer that reacts to the audio.",
-    stack: ["React", "Web Audio API", "Canvas"],
-    live: "#",
-    repo: "#",
-    color: "yellow",
-  },
-  {
-    title: "Fjord CMS",
-    description:
-      "A minimalist headless CMS for photographers. Handles galleries, EXIF metadata and signed image URLs.",
-    stack: ["Node.js", "Fastify", "S3", "Sharp"],
-    repo: "#",
-    color: "cyan",
-  },
-  {
-    title: "Brutalist UI Kit",
-    description:
-      "A small open-source component library with chunky borders, offset shadows and accessible defaults.",
-    stack: ["React", "Tailwind", "Radix"],
-    live: "#",
-    repo: "#",
-    color: "black",
-  },
-  {
-    title: "Lens Log",
-    description:
-      "Personal photography journal with map-based browsing, location clustering and private sharing.",
-    stack: ["Next.js", "MapLibre", "Supabase"],
-    live: "#",
-    color: "pink",
-  },
-  {
-    title: "Tinybench",
-    description:
-      "A CLI for running quick microbenchmarks across Node versions. Pretty output, JSON export, CI-friendly.",
-    stack: ["Node.js", "TypeScript"],
-    repo: "#",
-    color: "yellow",
-  },
-]
-
-const cardColorMap: Record<Project["color"], string> = {
-  yellow: "bg-secondary text-secondary-foreground",
-  pink: "bg-accent text-accent-foreground",
-  cyan: "bg-[color:var(--brand-cyan)] text-foreground",
-  black: "bg-foreground text-background",
-}
-
-export default function ITPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 md:px-8 md:py-14">
       <header className="mb-10 md:mb-14">
@@ -186,63 +122,14 @@ export default function ITPage() {
       <section aria-labelledby="projects-heading">
         <div className="mb-6 flex items-end justify-between">
           <h2 id="projects-heading" className="font-display text-3xl md:text-4xl">
-            PROJECTS /
+            REPOSITORIES /
           </h2>
           <span className="hidden font-mono text-xs uppercase tracking-widest text-muted-foreground md:inline">
-            {projects.length} / Shipped
+            {content.repositories.length} / Added
           </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
-          {projects.map((p) => (
-            <article
-              key={p.title}
-              className={cn(
-                "flex flex-col justify-between rounded-2xl border-brutal-thick p-6 shadow-brutal shadow-brutal-hover md:p-7",
-                cardColorMap[p.color],
-              )}
-            >
-              <div>
-                <h3 className="font-display text-2xl leading-tight md:text-3xl">
-                  {p.title.toUpperCase()}
-                </h3>
-                <p className="mt-3 text-pretty leading-relaxed">{p.description}</p>
-
-                <ul className="mt-5 flex flex-wrap gap-2">
-                  {p.stack.map((t) => (
-                    <li
-                      key={t}
-                      className="rounded-sm border-[2px] border-foreground bg-background px-2 py-1 font-mono text-xs text-foreground"
-                    >
-                      {t}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-3">
-                {p.live && (
-                  <Link
-                    href={p.live}
-                    className="inline-flex items-center gap-2 rounded-md border-[3px] border-foreground bg-background px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground shadow-brutal-sm"
-                  >
-                    Live
-                    <ExternalLink className="size-4" aria-hidden="true" />
-                  </Link>
-                )}
-                {p.repo && (
-                  <Link
-                    href={p.repo}
-                    className="inline-flex items-center gap-2 rounded-md border-[3px] border-foreground bg-background px-3 py-2 font-display text-xs uppercase tracking-widest text-foreground shadow-brutal-sm"
-                  >
-                    Code
-                    <Github className="size-4" aria-hidden="true" />
-                  </Link>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
+        <RepositoryGallery repositories={content.repositories} />
       </section>
     </div>
   )

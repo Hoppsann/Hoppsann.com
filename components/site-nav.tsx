@@ -28,27 +28,39 @@ export function SiteNav() {
           HOPPSANN<span className="text-accent">.</span>
         </Link>
 
-        <nav className="hidden md:block" aria-label="Primary">
-          <ul className="flex items-center gap-2">
-            {links.map((l) => {
-              const active = pathname === l.href
-              return (
-                <li key={l.href}>
-                  <Link
-                    href={l.href}
-                    className={cn(
-                      "inline-flex items-center rounded-md border-[3px] border-foreground px-4 py-2 font-display text-sm uppercase tracking-wider",
-                      "shadow-brutal-sm shadow-brutal-hover bg-background",
-                      active && "bg-secondary",
-                    )}
-                  >
-                    {l.label}
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </nav>
+        <div className="hidden items-center gap-3 md:flex">
+          <nav aria-label="Primary">
+            <ul className="flex items-center gap-2">
+              {links.map((l) => {
+                const active = pathname === l.href
+                return (
+                  <li key={l.href}>
+                    <Link
+                      href={l.href}
+                      className={cn(
+                        "inline-flex items-center rounded-md border-[3px] border-foreground px-4 py-2 font-display text-sm uppercase tracking-wider",
+                        "shadow-brutal-sm shadow-brutal-hover bg-background",
+                        active && "bg-secondary",
+                      )}
+                    >
+                      {l.label}
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </nav>
+
+          <Link
+            href="/admin"
+            className={cn(
+              "inline-flex items-center rounded-md border-[3px] border-foreground px-4 py-2 font-display text-sm uppercase tracking-wider shadow-brutal-sm shadow-brutal-hover",
+              pathname === "/admin" ? "bg-accent text-accent-foreground" : "bg-[color:var(--brand-cyan)] text-foreground",
+            )}
+          >
+            Admin
+          </Link>
+        </div>
 
         <button
           className="md:hidden rounded-md border-[3px] border-foreground bg-secondary p-2 shadow-brutal-sm"
@@ -69,7 +81,7 @@ export function SiteNav() {
             {links.map((l) => {
               const active = pathname === l.href
               return (
-                <li key={l.href} className="border-b-[3px] border-foreground last:border-b-0">
+                <li key={l.href} className="border-b-[3px] border-foreground">
                   <Link
                     href={l.href}
                     onClick={() => setOpen(false)}
@@ -83,6 +95,20 @@ export function SiteNav() {
                 </li>
               )
             })}
+            <li className="last:border-b-0">
+              <Link
+                href="/admin"
+                onClick={() => setOpen(false)}
+                className={cn(
+                  "block px-4 py-3 font-display text-base uppercase tracking-wider",
+                  pathname === "/admin"
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-[color:var(--brand-cyan)] text-foreground",
+                )}
+              >
+                Admin
+              </Link>
+            </li>
           </ul>
         </nav>
       )}
