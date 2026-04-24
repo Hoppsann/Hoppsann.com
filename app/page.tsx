@@ -40,8 +40,9 @@ export default function HomePage() {
           Portfolio / 2026
         </div>
         <h1 className="mt-4 font-display text-5xl leading-[0.95] tracking-tight md:text-7xl lg:text-8xl">
-          HELLO, I&apos;M
+          HEISANN,
           <br />
+          OG{" "}
           <span className="inline-block rounded-lg bg-foreground px-3 py-1 text-background">
             HOPPSANN
           </span>
