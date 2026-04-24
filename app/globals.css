@@ -42,9 +42,9 @@
 
   --radius: 0rem;
 
-  --shadow-brutal: 8px 8px 0 0 #0a0a0a;
-  --shadow-brutal-sm: 4px 4px 0 0 #0a0a0a;
-  --shadow-brutal-lg: 12px 12px 0 0 #0a0a0a;
+  --shadow-brutal: 6px 8px 20px -4px rgba(10, 10, 10, 0.35), 2px 3px 0 0 rgba(10, 10, 10, 0.9);
+  --shadow-brutal-sm: 3px 4px 12px -3px rgba(10, 10, 10, 0.3), 1px 2px 0 0 rgba(10, 10, 10, 0.85);
+  --shadow-brutal-lg: 10px 14px 32px -6px rgba(10, 10, 10, 0.4), 3px 5px 0 0 rgba(10, 10, 10, 0.9);
 }
 
 @theme inline {
@@ -98,24 +98,36 @@
 
 @layer utilities {
   .shadow-brutal {
-    box-shadow: 8px 8px 0 0 var(--foreground);
+    box-shadow:
+      6px 8px 20px -4px rgba(10, 10, 10, 0.35),
+      2px 3px 0 0 rgba(10, 10, 10, 0.9);
   }
   .shadow-brutal-sm {
-    box-shadow: 4px 4px 0 0 var(--foreground);
+    box-shadow:
+      3px 4px 12px -3px rgba(10, 10, 10, 0.3),
+      1px 2px 0 0 rgba(10, 10, 10, 0.85);
   }
   .shadow-brutal-lg {
-    box-shadow: 12px 12px 0 0 var(--foreground);
+    box-shadow:
+      10px 14px 32px -6px rgba(10, 10, 10, 0.4),
+      3px 5px 0 0 rgba(10, 10, 10, 0.9);
   }
   .shadow-brutal-hover {
-    transition: transform 150ms ease, box-shadow 150ms ease;
+    transition:
+      transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1);
   }
   .shadow-brutal-hover:hover {
-    transform: translate(-2px, -2px);
-    box-shadow: 12px 12px 0 0 var(--foreground);
+    transform: translate(-2px, -3px);
+    box-shadow:
+      12px 18px 40px -6px rgba(10, 10, 10, 0.45),
+      4px 6px 0 0 rgba(10, 10, 10, 0.9);
   }
   .shadow-brutal-hover:active {
-    transform: translate(2px, 2px);
-    box-shadow: 4px 4px 0 0 var(--foreground);
+    transform: translate(1px, 2px);
+    box-shadow:
+      2px 3px 10px -3px rgba(10, 10, 10, 0.3),
+      1px 1px 0 0 rgba(10, 10, 10, 0.85);
   }
   .border-brutal {
     border-width: 3px;
