@@ -1,14 +1,13 @@
 import "server-only"
 
 import { randomBytes } from "crypto"
-import { mkdir, readFile, writeFile } from "fs/promises"
-import path from "path"
 import type {
   AuthenticatorTransportFuture,
   Base64URLString,
   CredentialDeviceType,
   WebAuthnCredential,
 } from "@simplewebauthn/server"
+import { Redis } from "@upstash/redis"
 
 export type StoredAdminPasskey = {
   id: Base64URLString
@@ -27,7 +26,12 @@ type AdminSecurityState = {
   passkeys: StoredAdminPasskey[]
 }
 
-const DATA_FILE_PATH = path.join(process.cwd(), "data", "admin-security.json")
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+})
+
+const SECURITY_KEY = "admin-security-state"
 
 function createEmptyState(): AdminSecurityState {
   return {
@@ -44,65 +48,54 @@ function decodeBuffer(value: Base64URLString) {
   return new Uint8Array(Buffer.from(value, "base64url"))
 }
 
-async function ensureSecurityFile() {
-  await mkdir(path.dirname(DATA_FILE_PATH), { recursive: true })
-
+async function readSecurityState(): Promise<AdminSecurityState> {
   try {
-    await readFile(DATA_FILE_PATH, "utf8")
-  } catch {
-    await writeFile(DATA_FILE_PATH, `${JSON.stringify(createEmptyState(), null, 2)}\n`, "utf8")
-  }
-}
+    const stored = await redis.get(SECURITY_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored as string) as Partial<AdminSecurityState>
+      const hasUserID =
+        typeof parsed.webauthnUserID === "string" &&
+        parsed.webauthnUserID !== "replace-on-first-run"
 
-async function readSecurityFile(): Promise<AdminSecurityState> {
-  await ensureSecurityFile()
-
-  try {
-    const raw = await readFile(DATA_FILE_PATH, "utf8")
-    const parsed = JSON.parse(raw) as Partial<AdminSecurityState>
-    const hasUserID =
-      typeof parsed.webauthnUserID === "string" &&
-      parsed.webauthnUserID !== "replace-on-first-run"
-
-    if (hasUserID) {
-      return {
-        webauthnUserID: parsed.webauthnUserID as Base64URLString,
-        passkeys: Array.isArray(parsed.passkeys) ? parsed.passkeys : [],
-      } satisfies AdminSecurityState
+      if (hasUserID) {
+        return {
+          webauthnUserID: parsed.webauthnUserID as Base64URLString,
+          passkeys: Array.isArray(parsed.passkeys) ? parsed.passkeys : [],
+        } satisfies AdminSecurityState
+      }
     }
 
     const fallbackState = createEmptyState()
-    await writeSecurityFile(fallbackState)
+    await writeSecurityState(fallbackState)
     return fallbackState
   } catch {
     const fallbackState = createEmptyState()
-    await writeSecurityFile(fallbackState)
+    await writeSecurityState(fallbackState)
     return fallbackState
   }
 }
 
-async function writeSecurityFile(state: AdminSecurityState) {
-  await ensureSecurityFile()
-  await writeFile(DATA_FILE_PATH, `${JSON.stringify(state, null, 2)}\n`, "utf8")
+async function writeSecurityState(state: AdminSecurityState) {
+  await redis.set(SECURITY_KEY, JSON.stringify(state))
 }
 
 export async function hasAdminPasskeys() {
-  const state = await readSecurityFile()
+  const state = await readSecurityState()
   return state.passkeys.length > 0
 }
 
 export async function getAdminPasskeys() {
-  const state = await readSecurityFile()
+  const state = await readSecurityState()
   return state.passkeys
 }
 
 export async function getAdminPasskeyCount() {
-  const state = await readSecurityFile()
+  const state = await readSecurityState()
   return state.passkeys.length
 }
 
 export async function getAdminWebAuthnUserID(): Promise<Base64URLString> {
-  const state = await readSecurityFile()
+  const state = await readSecurityState()
   return state.webauthnUserID
 }
 
@@ -144,7 +137,7 @@ export async function saveAdminPasskey(input: {
   deviceType: CredentialDeviceType
   backedUp: boolean
 }) {
-  const state = await readSecurityFile()
+  const state = await readSecurityState()
   const passkey: StoredAdminPasskey = {
     id: input.credential.id,
     publicKey: encodeBuffer(input.credential.publicKey),
@@ -158,7 +151,7 @@ export async function saveAdminPasskey(input: {
 
   state.webauthnUserID = input.webauthnUserID
   state.passkeys = [passkey, ...state.passkeys.filter((candidate) => candidate.id !== passkey.id)]
-  await writeSecurityFile(state)
+  await writeSecurityState(state)
 
   return passkey
 }
@@ -169,7 +162,7 @@ export async function updateAdminPasskeyCounter(input: {
   deviceType: CredentialDeviceType
   backedUp: boolean
 }) {
-  const state = await readSecurityFile()
+  const state = await readSecurityState()
   state.passkeys = state.passkeys.map((passkey) =>
     passkey.id === input.id
       ? {
@@ -182,5 +175,5 @@ export async function updateAdminPasskeyCounter(input: {
       : passkey,
   )
 
-  await writeSecurityFile(state)
+  await writeSecurityState(state)
 }
