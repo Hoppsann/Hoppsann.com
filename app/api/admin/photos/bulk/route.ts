@@ -48,9 +48,6 @@ export async function POST(request: Request) {
   const results = []
 
   for (let i = 0; i < count; i++) {
-    const name = getTextValue(formData, "name", i)
-    const description = getTextValue(formData, "description", i)
-    const filters = parseFilters(getTextValue(formData, "filters", i))
     const file = formData.get(`file-${i}`)
 
     // Skip if no file provided
@@ -58,15 +55,10 @@ export async function POST(request: Request) {
       continue
     }
 
-    // Validate required fields
-    if (!name || !description || filters.length === 0) {
-      results.push({
-        success: false,
-        filename: file.name,
-        error: "Name, description, and at least one filter are required.",
-      })
-      continue
-    }
+    // Use defaults if metadata not provided
+    const name = getTextValue(formData, "name", i) || file.name.replace(/\.[^/.]+$/, "")
+    const description = getTextValue(formData, "description", i) || ""
+    const filters = parseFilters(getTextValue(formData, "filters", i)) || []
 
     try {
       const photo = await addPhotoEntry({ name, description, filters, file })

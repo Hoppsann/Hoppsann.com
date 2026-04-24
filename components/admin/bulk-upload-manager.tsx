@@ -90,19 +90,6 @@ export function BulkUploadManager({ kind, endpoint }: BulkUploadManagerProps) {
       return
     }
 
-    // Validate all files have required metadata
-    const invalidFile = files.find(
-      (f) => !f.name.trim() || !f.description.trim() || !f.filters.trim(),
-    )
-
-    if (invalidFile) {
-      setState({
-        status: "error",
-        message: "All files need a name, description, and filters.",
-      })
-      return
-    }
-
     setIsPending(true)
     setState(IDLE_MESSAGE)
 
@@ -216,13 +203,13 @@ export function BulkUploadManager({ kind, endpoint }: BulkUploadManagerProps) {
                     htmlFor={`name-${file.id}`}
                     className="font-display text-xs uppercase tracking-[0.2em]"
                   >
-                    Name
+                    Name <span className="text-muted-foreground">(optional)</span>
                   </label>
                   <Input
                     id={`name-${file.id}`}
                     value={file.name}
                     onChange={(e) => updateFile(file.id, "name", e.target.value)}
-                    placeholder="e.g., Midnight Portrait"
+                    placeholder="Leave empty to use filename"
                     disabled={isPending}
                     className="h-9 rounded-lg border-[2px] border-foreground bg-background shadow-brutal-xs"
                   />
@@ -233,7 +220,7 @@ export function BulkUploadManager({ kind, endpoint }: BulkUploadManagerProps) {
                     htmlFor={`filters-${file.id}`}
                     className="font-display text-xs uppercase tracking-[0.2em]"
                   >
-                    Tags
+                    Tags <span className="text-muted-foreground">(optional)</span>
                   </label>
                   <Input
                     id={`filters-${file.id}`}
@@ -251,7 +238,7 @@ export function BulkUploadManager({ kind, endpoint }: BulkUploadManagerProps) {
                   htmlFor={`description-${file.id}`}
                   className="font-display text-xs uppercase tracking-[0.2em]"
                 >
-                  Description
+                  Description <span className="text-muted-foreground">(optional)</span>
                 </label>
                 <Textarea
                   id={`description-${file.id}`}
