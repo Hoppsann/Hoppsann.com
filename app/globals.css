@@ -42,9 +42,9 @@
 
   --radius: 0rem;
 
-  --shadow-brutal: 6px 6px 0.5px 0 rgba(10, 10, 10, 1);
-  --shadow-brutal-sm: 3px 3px 0.5px 0 rgba(10, 10, 10, 1);
-  --shadow-brutal-lg: 9px 9px 0.5px 0 rgba(10, 10, 10, 1);
+  --shadow-brutal: 5px 5px 4px 0 rgba(10, 10, 10, 0.4);
+  --shadow-brutal-sm: 3px 3px 3px 0 rgba(10, 10, 10, 0.35);
+  --shadow-brutal-lg: 7px 7px 6px 0 rgba(10, 10, 10, 0.45);
 }
 
 @theme inline {
@@ -98,13 +98,13 @@
 
 @layer utilities {
   .shadow-brutal {
-    box-shadow: 6px 6px 0.5px 0 rgba(10, 10, 10, 1);
+    box-shadow: 5px 5px 4px 0 rgba(10, 10, 10, 0.4);
   }
   .shadow-brutal-sm {
-    box-shadow: 3px 3px 0.5px 0 rgba(10, 10, 10, 1);
+    box-shadow: 3px 3px 3px 0 rgba(10, 10, 10, 0.35);
   }
   .shadow-brutal-lg {
-    box-shadow: 9px 9px 0.5px 0 rgba(10, 10, 10, 1);
+    box-shadow: 7px 7px 6px 0 rgba(10, 10, 10, 0.45);
   }
   .shadow-brutal-hover {
     transition:
@@ -113,11 +113,11 @@
   }
   .shadow-brutal-hover:hover {
     transform: translate(-2px, -2px);
-    box-shadow: 10px 10px 0.5px 0 rgba(10, 10, 10, 1);
+    box-shadow: 8px 8px 6px 0 rgba(10, 10, 10, 0.45);
   }
   .shadow-brutal-hover:active {
     transform: translate(2px, 2px);
-    box-shadow: 2px 2px 0.5px 0 rgba(10, 10, 10, 1);
+    box-shadow: 2px 2px 2px 0 rgba(10, 10, 10, 0.3);
   }
   .border-brutal {
     border-width: 3px;
