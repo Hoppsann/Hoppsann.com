@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { BulkUploadManager } from "@/components/admin/bulk-upload-manager"
 import type { AdminApiResponse } from "@/lib/admin-api"
 import type {
   PortfolioContent,
@@ -232,6 +233,7 @@ function PhotoManager({
   const router = useRouter()
   const [state, setState] = useState<MessageState>(IDLE_MESSAGE)
   const [isPending, setIsPending] = useState(false)
+  const [bulkMode, setBulkMode] = useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -271,74 +273,101 @@ function PhotoManager({
       description="Upload image files and give each one a name, description and comma-separated filters."
       count={photos.length}
     >
-      <form onSubmit={handleSubmit} encType="multipart/form-data" className="grid gap-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label htmlFor="photo-name" className="font-display text-xs uppercase tracking-[0.2em]">
-              Name
-            </label>
-            <Input
-              id="photo-name"
-              name="name"
-              placeholder="Midnight Portrait"
-              className="h-11 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
-            />
+      <div className="mb-4 flex gap-2">
+        <Button
+          onClick={() => setBulkMode(false)}
+          className={`rounded-lg border-[2px] px-3 py-2 font-display text-xs uppercase tracking-[0.2em] ${
+            !bulkMode
+              ? "border-foreground bg-foreground text-background shadow-brutal-xs"
+              : "border-foreground bg-background text-foreground shadow-brutal-xs hover:bg-muted"
+          }`}
+        >
+          Single
+        </Button>
+        <Button
+          onClick={() => setBulkMode(true)}
+          className={`rounded-lg border-[2px] px-3 py-2 font-display text-xs uppercase tracking-[0.2em] ${
+            bulkMode
+              ? "border-foreground bg-foreground text-background shadow-brutal-xs"
+              : "border-foreground bg-background text-foreground shadow-brutal-xs hover:bg-muted"
+          }`}
+        >
+          Bulk
+        </Button>
+      </div>
+
+      {bulkMode ? (
+        <BulkUploadManager kind="photo" endpoint="/api/admin/photos/bulk" />
+      ) : (
+        <form onSubmit={handleSubmit} encType="multipart/form-data" className="grid gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="photo-name" className="font-display text-xs uppercase tracking-[0.2em]">
+                Name
+              </label>
+              <Input
+                id="photo-name"
+                name="name"
+                placeholder="Midnight Portrait"
+                className="h-11 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label
+                htmlFor="photo-filters"
+                className="font-display text-xs uppercase tracking-[0.2em]"
+              >
+                Filters
+              </label>
+              <Input
+                id="photo-filters"
+                name="filters"
+                placeholder="portrait, studio, neon"
+                className="h-11 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
+              />
+            </div>
           </div>
+
           <div className="space-y-2">
             <label
-              htmlFor="photo-filters"
+              htmlFor="photo-description"
               className="font-display text-xs uppercase tracking-[0.2em]"
             >
-              Filters
+              Description
             </label>
-            <Input
-              id="photo-filters"
-              name="filters"
-              placeholder="portrait, studio, neon"
-              className="h-11 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
+            <Textarea
+              id="photo-description"
+              name="description"
+              placeholder="What the image shows or why it matters."
+              className="min-h-28 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
             />
           </div>
-        </div>
 
-        <div className="space-y-2">
-          <label
-            htmlFor="photo-description"
-            className="font-display text-xs uppercase tracking-[0.2em]"
+          <div className="space-y-2">
+            <label htmlFor="photo-file" className="font-display text-xs uppercase tracking-[0.2em]">
+              Upload image
+            </label>
+            <Input
+              id="photo-file"
+              name="file"
+              type="file"
+              accept="image/*"
+              className="h-12 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm file:font-display"
+            />
+          </div>
+
+          <StatusMessage state={state} />
+
+          <Button
+            type="submit"
+            disabled={isPending}
+            className="h-12 rounded-xl border-[3px] border-foreground bg-foreground font-display text-xs uppercase tracking-[0.2em] text-background shadow-brutal-sm hover:bg-foreground/90"
           >
-            Description
-          </label>
-          <Textarea
-            id="photo-description"
-            name="description"
-            placeholder="What the image shows or why it matters."
-            className="min-h-28 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="photo-file" className="font-display text-xs uppercase tracking-[0.2em]">
-            Upload image
-          </label>
-          <Input
-            id="photo-file"
-            name="file"
-            type="file"
-            accept="image/*"
-            className="h-12 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm file:font-display"
-          />
-        </div>
-
-        <StatusMessage state={state} />
-
-        <Button
-          type="submit"
-          disabled={isPending}
-          className="h-12 rounded-xl border-[3px] border-foreground bg-foreground font-display text-xs uppercase tracking-[0.2em] text-background shadow-brutal-sm hover:bg-foreground/90"
-        >
-          <Upload className="size-4" aria-hidden="true" />
-          {isPending ? "Uploading..." : "Add photo"}
-        </Button>
-      </form>
+            <Upload className="size-4" aria-hidden="true" />
+            {isPending ? "Uploading..." : "Add photo"}
+          </Button>
+        </form>
+      )}
 
       <div className="mt-8">
         <SectionList kind="photo" entries={photos} onDelete={onDelete} />
@@ -357,6 +386,7 @@ function VideoManager({
   const router = useRouter()
   const [state, setState] = useState<MessageState>(IDLE_MESSAGE)
   const [isPending, setIsPending] = useState(false)
+  const [bulkMode, setBulkMode] = useState(false)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -396,74 +426,101 @@ function VideoManager({
       description="Upload a video file and assign the text metadata that will appear on the videography page."
       count={videos.length}
     >
-      <form onSubmit={handleSubmit} encType="multipart/form-data" className="grid gap-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label htmlFor="video-name" className="font-display text-xs uppercase tracking-[0.2em]">
-              Name
-            </label>
-            <Input
-              id="video-name"
-              name="name"
-              placeholder="Live Session Cut"
-              className="h-11 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
-            />
+      <div className="mb-4 flex gap-2">
+        <Button
+          onClick={() => setBulkMode(false)}
+          className={`rounded-lg border-[2px] px-3 py-2 font-display text-xs uppercase tracking-[0.2em] ${
+            !bulkMode
+              ? "border-foreground bg-foreground text-background shadow-brutal-xs"
+              : "border-foreground bg-background text-foreground shadow-brutal-xs hover:bg-muted"
+          }`}
+        >
+          Single
+        </Button>
+        <Button
+          onClick={() => setBulkMode(true)}
+          className={`rounded-lg border-[2px] px-3 py-2 font-display text-xs uppercase tracking-[0.2em] ${
+            bulkMode
+              ? "border-foreground bg-foreground text-background shadow-brutal-xs"
+              : "border-foreground bg-background text-foreground shadow-brutal-xs hover:bg-muted"
+          }`}
+        >
+          Bulk
+        </Button>
+      </div>
+
+      {bulkMode ? (
+        <BulkUploadManager kind="video" endpoint="/api/admin/videos/bulk" />
+      ) : (
+        <form onSubmit={handleSubmit} encType="multipart/form-data" className="grid gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label htmlFor="video-name" className="font-display text-xs uppercase tracking-[0.2em]">
+                Name
+              </label>
+              <Input
+                id="video-name"
+                name="name"
+                placeholder="Live Session Cut"
+                className="h-11 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label
+                htmlFor="video-filters"
+                className="font-display text-xs uppercase tracking-[0.2em]"
+              >
+                Filters
+              </label>
+              <Input
+                id="video-filters"
+                name="filters"
+                placeholder="music video, performance, edit"
+                className="h-11 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
+              />
+            </div>
           </div>
+
           <div className="space-y-2">
             <label
-              htmlFor="video-filters"
+              htmlFor="video-description"
               className="font-display text-xs uppercase tracking-[0.2em]"
             >
-              Filters
+              Description
             </label>
-            <Input
-              id="video-filters"
-              name="filters"
-              placeholder="music video, performance, edit"
-              className="h-11 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
+            <Textarea
+              id="video-description"
+              name="description"
+              placeholder="What viewers should know before opening it."
+              className="min-h-28 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
             />
           </div>
-        </div>
 
-        <div className="space-y-2">
-          <label
-            htmlFor="video-description"
-            className="font-display text-xs uppercase tracking-[0.2em]"
+          <div className="space-y-2">
+            <label htmlFor="video-file" className="font-display text-xs uppercase tracking-[0.2em]">
+              Upload video
+            </label>
+            <Input
+              id="video-file"
+              name="file"
+              type="file"
+              accept="video/*"
+              className="h-12 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm file:font-display"
+            />
+          </div>
+
+          <StatusMessage state={state} />
+
+          <Button
+            type="submit"
+            disabled={isPending}
+            className="h-12 rounded-xl border-[3px] border-foreground bg-foreground font-display text-xs uppercase tracking-[0.2em] text-background shadow-brutal-sm hover:bg-foreground/90"
           >
-            Description
-          </label>
-          <Textarea
-            id="video-description"
-            name="description"
-            placeholder="What viewers should know before opening it."
-            className="min-h-28 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label htmlFor="video-file" className="font-display text-xs uppercase tracking-[0.2em]">
-            Upload video
-          </label>
-          <Input
-            id="video-file"
-            name="file"
-            type="file"
-            accept="video/*"
-            className="h-12 rounded-xl border-[3px] border-foreground bg-background shadow-brutal-sm file:font-display"
-          />
-        </div>
-
-        <StatusMessage state={state} />
-
-        <Button
-          type="submit"
-          disabled={isPending}
-          className="h-12 rounded-xl border-[3px] border-foreground bg-foreground font-display text-xs uppercase tracking-[0.2em] text-background shadow-brutal-sm hover:bg-foreground/90"
-        >
-          <Film className="size-4" aria-hidden="true" />
-          {isPending ? "Uploading..." : "Add video"}
-        </Button>
-      </form>
+            <Film className="size-4" aria-hidden="true" />
+            {isPending ? "Uploading..." : "Add video"}
+          </Button>
+        </form>
+      )}
 
       <div className="mt-8">
         <SectionList kind="video" entries={videos} onDelete={onDelete} />
