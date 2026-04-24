@@ -26,12 +26,17 @@ type AdminSecurityState = {
   passkeys: StoredAdminPasskey[]
 }
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
-})
+const redis = process.env.UPSTASH_REDIS_REST_URL
+  ? new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+  : null
 
 const SECURITY_KEY = "admin-security-state"
+
+// In-memory fallback for development/testing
+let fallbackSecurityState: AdminSecurityState | null = null
 
 function createEmptyState(): AdminSecurityState {
   return {
@@ -50,6 +55,11 @@ function decodeBuffer(value: Base64URLString) {
 
 async function readSecurityState(): Promise<AdminSecurityState> {
   try {
+    if (!redis) {
+      // Fallback: return empty state if Redis not configured
+      return fallbackSecurityState || createEmptyState()
+    }
+
     const stored = await redis.get(SECURITY_KEY)
     if (stored) {
       const parsed = JSON.parse(stored as string) as Partial<AdminSecurityState>
@@ -68,15 +78,28 @@ async function readSecurityState(): Promise<AdminSecurityState> {
     const fallbackState = createEmptyState()
     await writeSecurityState(fallbackState)
     return fallbackState
-  } catch {
+  } catch (error) {
+    console.error("Failed to read security state:", error)
     const fallbackState = createEmptyState()
-    await writeSecurityState(fallbackState)
+    fallbackSecurityState = fallbackState
     return fallbackState
   }
 }
 
 async function writeSecurityState(state: AdminSecurityState) {
-  await redis.set(SECURITY_KEY, JSON.stringify(state))
+  try {
+    if (!redis) {
+      // Fallback: store in memory
+      fallbackSecurityState = state
+      return
+    }
+
+    await redis.set(SECURITY_KEY, JSON.stringify(state))
+  } catch (error) {
+    console.error("Failed to write security state:", error)
+    // Still store in memory as fallback
+    fallbackSecurityState = state
+  }
 }
 
 export async function hasAdminPasskeys() {
