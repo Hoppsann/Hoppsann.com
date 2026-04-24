@@ -3,7 +3,7 @@ import "server-only"
 import { createHash, timingSafeEqual } from "crypto"
 import { cookies } from "next/headers"
 
-const ADMIN_COOKIE_NAME = "hoppsann-admin-session"
+export const ADMIN_COOKIE_NAME = "hoppsann-admin-session"
 const SESSION_SALT = "hoppsann-admin-session"
 const FALLBACK_ADMIN_CODE = "hoppsann-admin"
 
@@ -22,10 +22,20 @@ export function getAdminAccessCode() {
   return process.env.ADMIN_ACCESS_CODE?.trim() || FALLBACK_ADMIN_CODE
 }
 
-function getAdminSessionValue() {
+export function getAdminSessionValue() {
   return createHash("sha256")
     .update(`${SESSION_SALT}:${getAdminAccessCode()}`)
     .digest("hex")
+}
+
+export function getAdminSessionCookieOptions(secure = process.env.NODE_ENV === "production") {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure,
+    path: "/",
+    maxAge: 60 * 60 * 12,
+  }
 }
 
 export function isAdminCodeValid(candidate: string) {
@@ -46,21 +56,4 @@ export async function isAdminAuthenticated() {
   }
 
   return safeCompare(sessionCookie, getAdminSessionValue())
-}
-
-export async function createAdminSession() {
-  const cookieStore = await cookies()
-
-  cookieStore.set(ADMIN_COOKIE_NAME, getAdminSessionValue(), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 12,
-  })
-}
-
-export async function clearAdminSession() {
-  const cookieStore = await cookies()
-  cookieStore.delete(ADMIN_COOKIE_NAME)
 }

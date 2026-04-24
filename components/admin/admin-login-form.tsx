@@ -1,16 +1,60 @@
 "use client"
 
-import { useActionState } from "react"
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { LockKeyhole } from "lucide-react"
-import { authenticateAdmin, INITIAL_ADMIN_ACTION_STATE } from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import type { AdminApiResponse } from "@/lib/admin-api"
+
+type LoginState = {
+  status: "idle" | "success" | "error"
+  message: string
+}
+
+const INITIAL_STATE: LoginState = {
+  status: "idle",
+  message: "",
+}
 
 export function AdminLoginForm() {
-  const [state, formAction, isPending] = useActionState(
-    authenticateAdmin,
-    INITIAL_ADMIN_ACTION_STATE,
-  )
+  const router = useRouter()
+  const [state, setState] = useState<LoginState>(INITIAL_STATE)
+  const [isPending, setIsPending] = useState(false)
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const form = event.currentTarget
+    const formData = new FormData(form)
+
+    setIsPending(true)
+    setState(INITIAL_STATE)
+
+    try {
+      const response = await fetch("/api/admin/login", {
+        method: "POST",
+        body: formData,
+      })
+      const payload = (await response.json()) as AdminApiResponse
+
+      setState({
+        status: payload.ok ? "success" : "error",
+        message: payload.message,
+      })
+
+      if (payload.ok) {
+        router.refresh()
+      }
+    } catch {
+      setState({
+        status: "error",
+        message: "Login failed. Try refreshing the page and trying again.",
+      })
+    } finally {
+      setIsPending(false)
+    }
+  }
 
   return (
     <section className="mx-auto max-w-xl rounded-2xl border-brutal-thick bg-background p-6 shadow-brutal md:p-8">
@@ -26,7 +70,7 @@ export function AdminLoginForm() {
         </div>
       </div>
 
-      <form action={formAction} className="mt-8 space-y-4">
+      <form onSubmit={handleSubmit} className="mt-8 space-y-4">
         <div className="space-y-2">
           <label htmlFor="admin-code" className="font-display text-xs uppercase tracking-[0.2em]">
             Access code

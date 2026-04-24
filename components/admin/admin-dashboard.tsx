@@ -1,7 +1,8 @@
 "use client"
 
-import { useActionState, useEffect, useRef } from "react"
+import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   ExternalLink,
   Film,
@@ -10,18 +11,10 @@ import {
   Trash2,
   Upload,
 } from "lucide-react"
-import {
-  INITIAL_ADMIN_ACTION_STATE,
-  addPhotoAction,
-  addRepositoryAction,
-  addVideoAction,
-  deletePortfolioEntryAction,
-  logoutAdmin,
-  type AdminActionState,
-} from "@/app/admin/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import type { AdminApiResponse } from "@/lib/admin-api"
 import type {
   PortfolioContent,
   PortfolioEntryKind,
@@ -34,8 +27,9 @@ type AdminDashboardProps = {
   content: PortfolioContent
 }
 
-type MessageProps = {
-  state: AdminActionState
+type MessageState = {
+  status: "idle" | "success" | "error"
+  message: string
 }
 
 type SectionCardProps = {
@@ -49,6 +43,21 @@ type SectionCardProps = {
 type SectionListProps = {
   kind: PortfolioEntryKind
   entries: Array<PortfolioPhoto | PortfolioVideo | RepositoryCard>
+  onDelete: (kind: PortfolioEntryKind, id: string) => Promise<void>
+}
+
+const IDLE_MESSAGE: MessageState = {
+  status: "idle",
+  message: "",
+}
+
+async function postForm(endpoint: string, formData: FormData) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    body: formData,
+  })
+
+  return (await response.json()) as AdminApiResponse
 }
 
 function SectionCard({ title, kicker, description, count, children }: SectionCardProps) {
@@ -74,7 +83,7 @@ function SectionCard({ title, kicker, description, count, children }: SectionCar
   )
 }
 
-function StatusMessage({ state }: MessageProps) {
+function StatusMessage({ state }: { state: MessageState }) {
   if (state.status === "idle") {
     return null
   }
@@ -89,19 +98,6 @@ function StatusMessage({ state }: MessageProps) {
     >
       {state.message}
     </p>
-  )
-}
-
-function DeleteEntryButton() {
-  return (
-    <Button
-      type="submit"
-      variant="outline"
-      className="h-10 rounded-xl border-[3px] border-foreground bg-accent px-3 font-display text-[11px] uppercase tracking-[0.2em] text-accent-foreground shadow-brutal-sm hover:bg-accent/90"
-    >
-      <Trash2 className="size-4" aria-hidden="true" />
-      Remove
-    </Button>
   )
 }
 
@@ -120,7 +116,42 @@ function ItemFilters({ filters }: { filters: string[] }) {
   )
 }
 
-function SectionList({ kind, entries }: SectionListProps) {
+function DeleteEntryButton({
+  kind,
+  id,
+  onDelete,
+}: {
+  kind: PortfolioEntryKind
+  id: string
+  onDelete: (kind: PortfolioEntryKind, id: string) => Promise<void>
+}) {
+  const [isPending, setIsPending] = useState(false)
+
+  async function handleDelete() {
+    setIsPending(true)
+
+    try {
+      await onDelete(kind, id)
+    } finally {
+      setIsPending(false)
+    }
+  }
+
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      disabled={isPending}
+      onClick={handleDelete}
+      className="h-10 rounded-xl border-[3px] border-foreground bg-accent px-3 font-display text-[11px] uppercase tracking-[0.2em] text-accent-foreground shadow-brutal-sm hover:bg-accent/90"
+    >
+      <Trash2 className="size-4" aria-hidden="true" />
+      {isPending ? "Removing..." : "Remove"}
+    </Button>
+  )
+}
+
+function SectionList({ kind, entries, onDelete }: SectionListProps) {
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border-[3px] border-dashed border-foreground/60 bg-muted/40 px-4 py-6 text-sm text-muted-foreground">
@@ -184,26 +215,54 @@ function SectionList({ kind, entries }: SectionListProps) {
             )}
           </div>
 
-          <form action={deletePortfolioEntryAction}>
-            <input type="hidden" name="kind" value={kind} />
-            <input type="hidden" name="id" value={entry.id} />
-            <DeleteEntryButton />
-          </form>
+          <DeleteEntryButton kind={kind} id={entry.id} onDelete={onDelete} />
         </article>
       ))}
     </div>
   )
 }
 
-function PhotoManager({ photos }: { photos: PortfolioPhoto[] }) {
-  const formRef = useRef<HTMLFormElement>(null)
-  const [state, formAction, isPending] = useActionState(addPhotoAction, INITIAL_ADMIN_ACTION_STATE)
+function PhotoManager({
+  photos,
+  onDelete,
+}: {
+  photos: PortfolioPhoto[]
+  onDelete: (kind: PortfolioEntryKind, id: string) => Promise<void>
+}) {
+  const router = useRouter()
+  const [state, setState] = useState<MessageState>(IDLE_MESSAGE)
+  const [isPending, setIsPending] = useState(false)
 
-  useEffect(() => {
-    if (state.status === "success") {
-      formRef.current?.reset()
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const form = event.currentTarget
+    const formData = new FormData(form)
+
+    setIsPending(true)
+    setState(IDLE_MESSAGE)
+
+    try {
+      const payload = await postForm("/api/admin/photos", formData)
+
+      setState({
+        status: payload.ok ? "success" : "error",
+        message: payload.message,
+      })
+
+      if (payload.ok) {
+        form.reset()
+        router.refresh()
+      }
+    } catch {
+      setState({
+        status: "error",
+        message: "Photo upload failed. Try again.",
+      })
+    } finally {
+      setIsPending(false)
     }
-  }, [state.status])
+  }
 
   return (
     <SectionCard
@@ -212,12 +271,7 @@ function PhotoManager({ photos }: { photos: PortfolioPhoto[] }) {
       description="Upload image files and give each one a name, description and comma-separated filters."
       count={photos.length}
     >
-      <form
-        ref={formRef}
-        action={formAction}
-        encType="multipart/form-data"
-        className="grid gap-4"
-      >
+      <form onSubmit={handleSubmit} encType="multipart/form-data" className="grid gap-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label htmlFor="photo-name" className="font-display text-xs uppercase tracking-[0.2em]">
@@ -287,21 +341,53 @@ function PhotoManager({ photos }: { photos: PortfolioPhoto[] }) {
       </form>
 
       <div className="mt-8">
-        <SectionList kind="photo" entries={photos} />
+        <SectionList kind="photo" entries={photos} onDelete={onDelete} />
       </div>
     </SectionCard>
   )
 }
 
-function VideoManager({ videos }: { videos: PortfolioVideo[] }) {
-  const formRef = useRef<HTMLFormElement>(null)
-  const [state, formAction, isPending] = useActionState(addVideoAction, INITIAL_ADMIN_ACTION_STATE)
+function VideoManager({
+  videos,
+  onDelete,
+}: {
+  videos: PortfolioVideo[]
+  onDelete: (kind: PortfolioEntryKind, id: string) => Promise<void>
+}) {
+  const router = useRouter()
+  const [state, setState] = useState<MessageState>(IDLE_MESSAGE)
+  const [isPending, setIsPending] = useState(false)
 
-  useEffect(() => {
-    if (state.status === "success") {
-      formRef.current?.reset()
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const form = event.currentTarget
+    const formData = new FormData(form)
+
+    setIsPending(true)
+    setState(IDLE_MESSAGE)
+
+    try {
+      const payload = await postForm("/api/admin/videos", formData)
+
+      setState({
+        status: payload.ok ? "success" : "error",
+        message: payload.message,
+      })
+
+      if (payload.ok) {
+        form.reset()
+        router.refresh()
+      }
+    } catch {
+      setState({
+        status: "error",
+        message: "Video upload failed. Try again.",
+      })
+    } finally {
+      setIsPending(false)
     }
-  }, [state.status])
+  }
 
   return (
     <SectionCard
@@ -310,12 +396,7 @@ function VideoManager({ videos }: { videos: PortfolioVideo[] }) {
       description="Upload a video file and assign the text metadata that will appear on the videography page."
       count={videos.length}
     >
-      <form
-        ref={formRef}
-        action={formAction}
-        encType="multipart/form-data"
-        className="grid gap-4"
-      >
+      <form onSubmit={handleSubmit} encType="multipart/form-data" className="grid gap-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label htmlFor="video-name" className="font-display text-xs uppercase tracking-[0.2em]">
@@ -385,24 +466,53 @@ function VideoManager({ videos }: { videos: PortfolioVideo[] }) {
       </form>
 
       <div className="mt-8">
-        <SectionList kind="video" entries={videos} />
+        <SectionList kind="video" entries={videos} onDelete={onDelete} />
       </div>
     </SectionCard>
   )
 }
 
-function RepositoryManager({ repositories }: { repositories: RepositoryCard[] }) {
-  const formRef = useRef<HTMLFormElement>(null)
-  const [state, formAction, isPending] = useActionState(
-    addRepositoryAction,
-    INITIAL_ADMIN_ACTION_STATE,
-  )
+function RepositoryManager({
+  repositories,
+  onDelete,
+}: {
+  repositories: RepositoryCard[]
+  onDelete: (kind: PortfolioEntryKind, id: string) => Promise<void>
+}) {
+  const router = useRouter()
+  const [state, setState] = useState<MessageState>(IDLE_MESSAGE)
+  const [isPending, setIsPending] = useState(false)
 
-  useEffect(() => {
-    if (state.status === "success") {
-      formRef.current?.reset()
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+
+    const form = event.currentTarget
+    const formData = new FormData(form)
+
+    setIsPending(true)
+    setState(IDLE_MESSAGE)
+
+    try {
+      const payload = await postForm("/api/admin/repositories", formData)
+
+      setState({
+        status: payload.ok ? "success" : "error",
+        message: payload.message,
+      })
+
+      if (payload.ok) {
+        form.reset()
+        router.refresh()
+      }
+    } catch {
+      setState({
+        status: "error",
+        message: "Repository card failed to save. Try again.",
+      })
+    } finally {
+      setIsPending(false)
     }
-  }, [state.status])
+  }
 
   return (
     <SectionCard
@@ -411,7 +521,7 @@ function RepositoryManager({ repositories }: { repositories: RepositoryCard[] })
       description="Create the cards shown on the IT page with repository links, optional live links and your own filters."
       count={repositories.length}
     >
-      <form ref={formRef} action={formAction} className="grid gap-4">
+      <form onSubmit={handleSubmit} className="grid gap-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label htmlFor="repo-name" className="font-display text-xs uppercase tracking-[0.2em]">
@@ -501,13 +611,62 @@ function RepositoryManager({ repositories }: { repositories: RepositoryCard[] })
       </form>
 
       <div className="mt-8">
-        <SectionList kind="repository" entries={repositories} />
+        <SectionList kind="repository" entries={repositories} onDelete={onDelete} />
       </div>
     </SectionCard>
   )
 }
 
 export function AdminDashboard({ content }: AdminDashboardProps) {
+  const router = useRouter()
+  const [topState, setTopState] = useState<MessageState>(IDLE_MESSAGE)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  async function handleDelete(kind: PortfolioEntryKind, id: string) {
+    const formData = new FormData()
+    formData.set("kind", kind)
+    formData.set("id", id)
+
+    const payload = await postForm("/api/admin/delete", formData)
+
+    setTopState({
+      status: payload.ok ? "success" : "error",
+      message: payload.message,
+    })
+
+    if (payload.ok) {
+      router.refresh()
+    }
+  }
+
+  async function handleLogout() {
+    setIsLoggingOut(true)
+    setTopState(IDLE_MESSAGE)
+
+    try {
+      const response = await fetch("/api/admin/logout", {
+        method: "POST",
+      })
+      const payload = (await response.json()) as AdminApiResponse
+
+      setTopState({
+        status: payload.ok ? "success" : "error",
+        message: payload.message,
+      })
+
+      if (payload.ok) {
+        router.refresh()
+      }
+    } catch {
+      setTopState({
+        status: "error",
+        message: "Logout failed. Refresh the page and try again.",
+      })
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border-brutal-thick bg-foreground p-6 text-background shadow-brutal md:p-8">
@@ -537,23 +696,27 @@ export function AdminDashboard({ content }: AdminDashboardProps) {
             <div className="rounded-xl border-[3px] border-background bg-accent px-4 py-3 font-display text-xs uppercase tracking-[0.2em] text-accent-foreground shadow-brutal-sm">
               {content.repositories.length} repos
             </div>
-            <form action={logoutAdmin}>
-              <Button
-                type="submit"
-                className="h-12 rounded-xl border-[3px] border-background bg-background px-4 font-display text-xs uppercase tracking-[0.2em] text-foreground shadow-brutal-sm hover:bg-background/90"
-              >
-                <LogOut className="size-4" aria-hidden="true" />
-                Log out
-              </Button>
-            </form>
+            <Button
+              type="button"
+              disabled={isLoggingOut}
+              onClick={handleLogout}
+              className="h-12 rounded-xl border-[3px] border-background bg-background px-4 font-display text-xs uppercase tracking-[0.2em] text-foreground shadow-brutal-sm hover:bg-background/90"
+            >
+              <LogOut className="size-4" aria-hidden="true" />
+              {isLoggingOut ? "Logging out..." : "Log out"}
+            </Button>
           </div>
+        </div>
+
+        <div className="mt-6">
+          <StatusMessage state={topState} />
         </div>
       </section>
 
       <div className="grid gap-8">
-        <PhotoManager photos={content.photos} />
-        <VideoManager videos={content.videos} />
-        <RepositoryManager repositories={content.repositories} />
+        <PhotoManager photos={content.photos} onDelete={handleDelete} />
+        <VideoManager videos={content.videos} onDelete={handleDelete} />
+        <RepositoryManager repositories={content.repositories} onDelete={handleDelete} />
       </div>
     </div>
   )
