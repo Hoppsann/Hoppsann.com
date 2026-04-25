@@ -41,6 +41,7 @@ export async function POST(request: Request) {
   }
 
   if (!ADMIN_EMAIL) {
+    console.error("ADMIN_EMAIL is not set")
     return NextResponse.json(
       {
         ok: false,
@@ -49,6 +50,9 @@ export async function POST(request: Request) {
       { status: 500 },
     )
   }
+
+  console.log("Resend API Key present:", !!process.env.RESEND_API_KEY)
+  console.log("Admin email:", ADMIN_EMAIL)
 
   try {
     // Create a pending approval token
@@ -59,6 +63,7 @@ export async function POST(request: Request) {
     const approveUrl = `${baseUrl}/api/admin/login/approve?token=${approvalToken}`
     const denyUrl = `${baseUrl}/api/admin/login/deny?token=${approvalToken}`
 
+    console.log("Sending email via Resend...")
     // Send approval email
     const emailResult = await resend.emails.send({
       from: "noreply@resend.dev",
@@ -79,9 +84,11 @@ export async function POST(request: Request) {
       `,
     })
 
+    console.log("Email result:", emailResult)
+
     if (emailResult.error) {
-      console.error("Resend email error:", emailResult.error)
-      throw new Error(`Email failed: ${emailResult.error.message}`)
+      console.error("Resend email error:", JSON.stringify(emailResult.error))
+      throw new Error(`Email failed: ${JSON.stringify(emailResult.error)}`)
     }
 
     // Set approval token in cookie (temporarily)
@@ -99,7 +106,8 @@ export async function POST(request: Request) {
 
     return response
   } catch (error) {
-    console.error("Login error:", error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    console.error("Login error:", errorMessage)
     return NextResponse.json(
       {
         ok: false,
