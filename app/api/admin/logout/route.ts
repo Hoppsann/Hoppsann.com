@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server"
 import {
   ADMIN_COOKIE_NAME,
-  ADMIN_PASSKEY_CHALLENGE_COOKIE_NAME,
-  ADMIN_PASSWORD_COOKIE_NAME,
-  getAdminPasskeyChallengeCookieOptions,
-  getAdminPasswordCookieOptions,
+  ADMIN_APPROVAL_COOKIE_NAME,
   getAdminSessionCookieOptions,
+  getAdminApprovalCookieOptions,
 } from "@/lib/admin-auth"
 
 export async function POST(request: Request) {
@@ -19,12 +17,8 @@ export async function POST(request: Request) {
     ...getAdminSessionCookieOptions(isHttps),
     maxAge: 0,
   })
-  response.cookies.set(ADMIN_PASSWORD_COOKIE_NAME, "", {
-    ...getAdminPasswordCookieOptions(isHttps),
-    maxAge: 0,
-  })
-  response.cookies.set(ADMIN_PASSKEY_CHALLENGE_COOKIE_NAME, "", {
-    ...getAdminPasskeyChallengeCookieOptions(isHttps),
+  response.cookies.set(ADMIN_APPROVAL_COOKIE_NAME, "", {
+    ...getAdminApprovalCookieOptions(isHttps),
     maxAge: 0,
   })
 

@@ -8,7 +8,6 @@ import {
   Film,
   Github,
   LogOut,
-  RotateCcw,
   Trash2,
   Upload,
 } from "lucide-react"
@@ -679,7 +678,6 @@ export function AdminDashboard({ content }: AdminDashboardProps) {
   const router = useRouter()
   const [topState, setTopState] = useState<MessageState>(IDLE_MESSAGE)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const [isResettingPasskey, setIsResettingPasskey] = useState(false)
 
   async function handleDelete(kind: PortfolioEntryKind, id: string) {
     const formData = new FormData()
@@ -726,34 +724,6 @@ export function AdminDashboard({ content }: AdminDashboardProps) {
     }
   }
 
-  async function handleResetPasskey() {
-    setIsResettingPasskey(true)
-    setTopState(IDLE_MESSAGE)
-
-    try {
-      const response = await fetch("/api/admin/passkey/reset", {
-        method: "POST",
-      })
-      const payload = (await response.json()) as AdminApiResponse
-
-      setTopState({
-        status: payload.ok ? "success" : "error",
-        message: payload.message,
-      })
-
-      if (payload.ok) {
-        router.refresh()
-      }
-    } catch {
-      setTopState({
-        status: "error",
-        message: "Failed to reset passkeys. Try again.",
-      })
-    } finally {
-      setIsResettingPasskey(false)
-    }
-  }
-
   return (
     <div className="space-y-8">
       <section className="rounded-2xl border-brutal-thick bg-foreground p-6 text-background shadow-brutal md:p-8">
@@ -783,15 +753,6 @@ export function AdminDashboard({ content }: AdminDashboardProps) {
             <div className="rounded-xl border-[3px] border-background bg-accent px-4 py-3 font-display text-xs uppercase tracking-[0.2em] text-accent-foreground shadow-brutal-sm">
               {content.repositories.length} repos
             </div>
-            <Button
-              type="button"
-              disabled={isResettingPasskey}
-              onClick={handleResetPasskey}
-              className="h-12 rounded-xl border-[3px] border-background bg-background px-4 font-display text-xs uppercase tracking-[0.2em] text-foreground shadow-brutal-sm hover:bg-background/90"
-            >
-              <RotateCcw className="size-4" aria-hidden="true" />
-              {isResettingPasskey ? "Resetting..." : "Reset 2FA"}
-            </Button>
             <Button
               type="button"
               disabled={isLoggingOut}

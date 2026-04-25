@@ -25,13 +25,7 @@ export async function POST(request: Request) {
     const isHttps = new URL(request.url).protocol === "https:"
     const response = NextResponse.json({
       ok: true,
-      message: "Passkeys have been reset. You'll need to set up a new one on your next login.",
-    })
-
-    // Clear the session so they have to log in again
-    response.cookies.set(ADMIN_COOKIE_NAME, "", {
-      ...getAdminSessionCookieOptions(isHttps),
-      maxAge: 0,
+      message: "Passkeys have been reset.",
     })
 
     return response

@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server"
+import { Resend } from "resend"
 import {
-  ADMIN_COOKIE_NAME,
-  ADMIN_PASSKEY_CHALLENGE_COOKIE_NAME,
-  ADMIN_PASSWORD_COOKIE_NAME,
-  getAdminPasskeyChallengeCookieOptions,
-  getAdminPasswordCookieOptions,
-  getAdminPasswordVerificationValue,
-  getAdminSessionCookieOptions,
+  ADMIN_APPROVAL_COOKIE_NAME,
+  getAdminApprovalCookieOptions,
   isAdminCodeValid,
 } from "@/lib/admin-auth"
-import { hasAdminPasskeys } from "@/lib/admin-passkeys"
+import { createPendingApproval } from "@/lib/admin-login-approvals"
+
+const resend = new Resend(process.env.RESEND_API_KEY)
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL
 
 function getTextValue(formData: FormData, key: string) {
   const value = formData.get(key)
@@ -41,25 +40,67 @@ export async function POST(request: Request) {
     )
   }
 
-  const hasPasskeys = await hasAdminPasskeys()
+  if (!ADMIN_EMAIL) {
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Email configuration is missing. Contact the site administrator.",
+      },
+      { status: 500 },
+    )
+  }
 
-  const response = NextResponse.json({
-    ok: true,
-    message: hasPasskeys
-      ? "Password accepted. Approve the login with your passkey."
-      : "Password accepted. Set up your passkey to finish securing admin access.",
-    step: hasPasskeys ? "verify-passkey" : "setup-passkey",
-  })
+  try {
+    // Create a pending approval token
+    const approvalToken = await createPendingApproval()
 
-  response.cookies.set(ADMIN_PASSWORD_COOKIE_NAME, getAdminPasswordVerificationValue(), getAdminPasswordCookieOptions(isHttps))
-  response.cookies.set(ADMIN_COOKIE_NAME, "", {
-    ...getAdminSessionCookieOptions(isHttps),
-    maxAge: 0,
-  })
-  response.cookies.set(ADMIN_PASSKEY_CHALLENGE_COOKIE_NAME, "", {
-    ...getAdminPasskeyChallengeCookieOptions(isHttps),
-    maxAge: 0,
-  })
+    // Generate approval/denial links
+    const baseUrl = new URL(request.url).origin
+    const approveUrl = `${baseUrl}/api/admin/login/approve?token=${approvalToken}`
+    const denyUrl = `${baseUrl}/api/admin/login/deny?token=${approvalToken}`
 
-  return response
+    // Send approval email
+    await resend.emails.send({
+      from: "Hoppsann Admin <onboarding@resend.dev>",
+      to: ADMIN_EMAIL,
+      subject: "Approve Admin Login",
+      html: `
+        <h2>Login Approval Required</h2>
+        <p>Someone is trying to access the admin panel.</p>
+        <p>
+          <a href="${approveUrl}" style="display: inline-block; padding: 10px 20px; background-color: #10b981; color: white; text-decoration: none; border-radius: 5px; margin-right: 10px;">
+            ✓ Approve
+          </a>
+          <a href="${denyUrl}" style="display: inline-block; padding: 10px 20px; background-color: #ef4444; color: white; text-decoration: none; border-radius: 5px;">
+            ✗ Deny
+          </a>
+        </p>
+        <p style="color: #999; font-size: 12px;">This link expires in 15 minutes.</p>
+      `,
+    })
+
+    // Set approval token in cookie (temporarily)
+    const response = NextResponse.json({
+      ok: true,
+      message: "Check your email for the approval link. You have 15 minutes to approve.",
+      step: "waiting-approval",
+    })
+
+    response.cookies.set(
+      ADMIN_APPROVAL_COOKIE_NAME,
+      approvalToken,
+      getAdminApprovalCookieOptions(isHttps),
+    )
+
+    return response
+  } catch (error) {
+    console.error("Login error:", error)
+    return NextResponse.json(
+      {
+        ok: false,
+        message: "Failed to send approval email. Try again.",
+      },
+      { status: 500 },
+    )
+  }
 }
