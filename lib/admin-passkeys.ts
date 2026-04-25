@@ -92,28 +92,6 @@ async function writeSecurityStateToFile(state: AdminSecurityState) {
   }
 }
 
-async function readSecurityStateFromFile(): Promise<AdminSecurityState | null> {
-  try {
-    const fileContent = await readFile(SECURITY_FILE, "utf-8")
-    const parsed = JSON.parse(fileContent) as Partial<AdminSecurityState>
-
-    if (
-      typeof parsed.webauthnUserID === "string" &&
-      parsed.webauthnUserID &&
-      Array.isArray(parsed.passkeys)
-    ) {
-      return {
-        webauthnUserID: parsed.webauthnUserID as Base64URLString,
-        passkeys: parsed.passkeys,
-      }
-    }
-  } catch (error) {
-    // File doesn't exist or is invalid - that's okay
-  }
-
-  return null
-}
-
 async function readSecurityState(): Promise<AdminSecurityState> {
   try {
     // Try Redis first
