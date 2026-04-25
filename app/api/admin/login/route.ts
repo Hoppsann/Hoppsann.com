@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     const denyUrl = `${baseUrl}/api/admin/login/deny?token=${approvalToken}`
 
     // Send approval email
-    await resend.emails.send({
+    const emailResult = await resend.emails.send({
       from: "Hoppsann Admin <onboarding@resend.dev>",
       to: ADMIN_EMAIL,
       subject: "Approve Admin Login",
@@ -78,6 +78,11 @@ export async function POST(request: Request) {
         <p style="color: #999; font-size: 12px;">This link expires in 15 minutes.</p>
       `,
     })
+
+    if (emailResult.error) {
+      console.error("Resend email error:", emailResult.error)
+      throw new Error(`Email failed: ${emailResult.error.message}`)
+    }
 
     // Set approval token in cookie (temporarily)
     const response = NextResponse.json({
