@@ -52,7 +52,7 @@ export function getAdminPasswordCookieOptions(secure = process.env.NODE_ENV === 
     sameSite: "lax" as const,
     secure,
     path: "/",
-    maxAge: 60 * 10,
+    maxAge: 60 * 30,
   }
 }
 
@@ -64,7 +64,7 @@ export function getAdminPasskeyChallengeCookieOptions(
     sameSite: "lax" as const,
     secure,
     path: "/",
-    maxAge: 60 * 5,
+    maxAge: 60 * 15,
   }
 }
 
