@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
     // Send approval email
     const emailResult = await resend.emails.send({
-      from: "Hoppsann Admin <onboarding@resend.dev>",
+      from: "noreply@resend.dev",
       to: ADMIN_EMAIL,
       subject: "Approve Admin Login",
       html: `
