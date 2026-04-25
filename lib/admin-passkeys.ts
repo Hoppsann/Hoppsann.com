@@ -2,7 +2,7 @@ import "server-only"
 
 import { randomBytes } from "crypto"
 import { readFile, writeFile } from "fs/promises"
-import { join } from "path"
+import { resolve } from "path"
 import type {
   AuthenticatorTransportFuture,
   Base64URLString,
@@ -36,7 +36,8 @@ const redis = process.env.UPSTASH_REDIS_REST_URL
   : null
 
 const SECURITY_KEY = "admin-security-state"
-const SECURITY_FILE = join(process.cwd(), "data", "admin-security.json")
+// Use resolve to get reliable path in all environments
+const SECURITY_FILE = resolve(process.cwd(), "data", "admin-security.json")
 
 function createEmptyState(): AdminSecurityState {
   return {
@@ -53,25 +54,26 @@ function decodeBuffer(value: Base64URLString) {
   return new Uint8Array(Buffer.from(value, "base64url"))
 }
 
-async function readSecurityStateFromFile(): Promise<AdminSecurityState> {
+async function readSecurityStateFromFile(): Promise<AdminSecurityState | null> {
   try {
     const fileContent = await readFile(SECURITY_FILE, "utf-8")
     const parsed = JSON.parse(fileContent) as Partial<AdminSecurityState>
-    const hasUserID =
-      typeof parsed.webauthnUserID === "string" &&
-      parsed.webauthnUserID !== "replace-on-first-run"
 
-    if (hasUserID) {
+    if (
+      typeof parsed.webauthnUserID === "string" &&
+      parsed.webauthnUserID &&
+      Array.isArray(parsed.passkeys)
+    ) {
       return {
         webauthnUserID: parsed.webauthnUserID as Base64URLString,
-        passkeys: Array.isArray(parsed.passkeys) ? parsed.passkeys : [],
-      } satisfies AdminSecurityState
+        passkeys: parsed.passkeys,
+      }
     }
   } catch (error) {
-    console.error("Failed to read security state from file:", error)
+    // File doesn't exist or is invalid - that's okay
   }
 
-  return createEmptyState()
+  return null
 }
 
 async function writeSecurityStateToFile(state: AdminSecurityState) {
@@ -79,35 +81,43 @@ async function writeSecurityStateToFile(state: AdminSecurityState) {
     await writeFile(SECURITY_FILE, JSON.stringify(state, null, 2))
   } catch (error) {
     console.error("Failed to write security state to file:", error)
+    throw error
   }
 }
 
 async function readSecurityState(): Promise<AdminSecurityState> {
   try {
+    // Try Redis first
     if (redis) {
-      const stored = await redis.get(SECURITY_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored as string) as Partial<AdminSecurityState>
-        const hasUserID =
-          typeof parsed.webauthnUserID === "string" &&
-          parsed.webauthnUserID !== "replace-on-first-run"
+      try {
+        const stored = await redis.get(SECURITY_KEY)
+        if (stored) {
+          const parsed = JSON.parse(stored as string) as Partial<AdminSecurityState>
 
-        if (hasUserID) {
-          return {
-            webauthnUserID: parsed.webauthnUserID as Base64URLString,
-            passkeys: Array.isArray(parsed.passkeys) ? parsed.passkeys : [],
-          } satisfies AdminSecurityState
+          if (
+            typeof parsed.webauthnUserID === "string" &&
+            parsed.webauthnUserID &&
+            Array.isArray(parsed.passkeys)
+          ) {
+            return {
+              webauthnUserID: parsed.webauthnUserID as Base64URLString,
+              passkeys: parsed.passkeys,
+            }
+          }
         }
+      } catch (error) {
+        console.error("Failed to read from Redis:", error)
+        // Fall through to file storage
       }
     }
 
-    // Fallback to file-based storage
+    // Fall back to file storage
     const fileState = await readSecurityStateFromFile()
-    
-    if (fileState.passkeys.length > 0 || fileState.webauthnUserID !== createEmptyState().webauthnUserID) {
+    if (fileState) {
       return fileState
     }
 
+    // No state found anywhere, create new one
     const newState = createEmptyState()
     await writeSecurityState(newState)
     return newState
