@@ -1,8 +1,8 @@
 import "server-only"
 
 import { randomBytes } from "crypto"
-import { readFile, writeFile } from "fs/promises"
-import { resolve } from "path"
+import { mkdir, readFile, writeFile } from "fs/promises"
+import { dirname, resolve } from "path"
 import type {
   AuthenticatorTransportFuture,
   Base64URLString,
@@ -64,6 +64,7 @@ async function readSecurityStateFromFile(): Promise<AdminSecurityState | null> {
       parsed.webauthnUserID &&
       Array.isArray(parsed.passkeys)
     ) {
+      console.log(`[Admin Passkeys] Read state from file: ${parsed.passkeys.length} passkeys`)
       return {
         webauthnUserID: parsed.webauthnUserID as Base64URLString,
         passkeys: parsed.passkeys,
@@ -78,11 +79,39 @@ async function readSecurityStateFromFile(): Promise<AdminSecurityState | null> {
 
 async function writeSecurityStateToFile(state: AdminSecurityState) {
   try {
+    // Ensure the directory exists before writing
+    const dir = dirname(SECURITY_FILE)
+    await mkdir(dir, { recursive: true })
+    
+    console.log(`[Admin Passkeys] Writing ${state.passkeys.length} passkeys to file...`)
     await writeFile(SECURITY_FILE, JSON.stringify(state, null, 2))
+    console.log("[Admin Passkeys] File write successful")
   } catch (error) {
     console.error("Failed to write security state to file:", error)
     throw error
   }
+}
+
+async function readSecurityStateFromFile(): Promise<AdminSecurityState | null> {
+  try {
+    const fileContent = await readFile(SECURITY_FILE, "utf-8")
+    const parsed = JSON.parse(fileContent) as Partial<AdminSecurityState>
+
+    if (
+      typeof parsed.webauthnUserID === "string" &&
+      parsed.webauthnUserID &&
+      Array.isArray(parsed.passkeys)
+    ) {
+      return {
+        webauthnUserID: parsed.webauthnUserID as Base64URLString,
+        passkeys: parsed.passkeys,
+      }
+    }
+  } catch (error) {
+    // File doesn't exist or is invalid - that's okay
+  }
+
+  return null
 }
 
 async function readSecurityState(): Promise<AdminSecurityState> {
@@ -119,7 +148,14 @@ async function readSecurityState(): Promise<AdminSecurityState> {
 
     // No state found anywhere, create new one
     const newState = createEmptyState()
-    await writeSecurityState(newState)
+    // Only write if we're not in a read-only context
+    // This prevents creating unnecessary files
+    try {
+      await writeSecurityStateToFile(newState)
+    } catch (error) {
+      console.warn("Could not persist new security state:", error)
+      // Still return the state even if we can't write it
+    }
     return newState
   } catch (error) {
     console.error("Failed to read security state:", error)
@@ -128,21 +164,39 @@ async function readSecurityState(): Promise<AdminSecurityState> {
 }
 
 async function writeSecurityState(state: AdminSecurityState) {
-  try {
-    if (redis) {
-      await redis.set(SECURITY_KEY, JSON.stringify(state))
-    }
+  const errors: string[] = []
 
-    // Always write to file as well
+  // Write to file first (primary storage for this setup)
+  try {
     await writeSecurityStateToFile(state)
   } catch (error) {
-    console.error("Failed to write security state:", error)
+    const message = error instanceof Error ? error.message : String(error)
+    errors.push(`File write failed: ${message}`)
+    console.error("Failed to write to file:", message)
+  }
+
+  // Also try Redis if available
+  if (redis) {
+    try {
+      await redis.set(SECURITY_KEY, JSON.stringify(state))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      errors.push(`Redis write failed: ${message}`)
+      console.error("Failed to write to Redis:", message)
+    }
+  }
+
+  // If file write failed, throw error
+  if (errors.length > 0 && !redis) {
+    throw new Error(errors.join(" | "))
   }
 }
 
 export async function hasAdminPasskeys() {
   const state = await readSecurityState()
-  return state.passkeys.length > 0
+  const hasPasskeys = state.passkeys.length > 0
+  console.log(`[Admin Passkeys] Checking passkeys - Found ${state.passkeys.length} passkeys`)
+  return hasPasskeys
 }
 
 export async function getAdminPasskeys() {
@@ -198,6 +252,7 @@ export async function saveAdminPasskey(input: {
   deviceType: CredentialDeviceType
   backedUp: boolean
 }) {
+  console.log("[Admin Passkeys] Saving new passkey...")
   const state = await readSecurityState()
   const passkey: StoredAdminPasskey = {
     id: input.credential.id,
@@ -212,7 +267,12 @@ export async function saveAdminPasskey(input: {
 
   state.webauthnUserID = input.webauthnUserID
   state.passkeys = [passkey, ...state.passkeys.filter((candidate) => candidate.id !== passkey.id)]
+  
+  console.log(`[Admin Passkeys] Updated state with ${state.passkeys.length} total passkeys`)
+  
   await writeSecurityState(state)
+  
+  console.log("[Admin Passkeys] Passkey saved successfully")
 
   return passkey
 }
