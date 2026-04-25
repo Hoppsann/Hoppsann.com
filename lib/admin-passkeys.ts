@@ -1,6 +1,8 @@
 import "server-only"
 
 import { randomBytes } from "crypto"
+import { readFile, writeFile } from "fs/promises"
+import { join } from "path"
 import type {
   AuthenticatorTransportFuture,
   Base64URLString,
@@ -34,9 +36,7 @@ const redis = process.env.UPSTASH_REDIS_REST_URL
   : null
 
 const SECURITY_KEY = "admin-security-state"
-
-// In-memory fallback for development/testing
-let fallbackSecurityState: AdminSecurityState | null = null
+const SECURITY_FILE = join(process.cwd(), "data", "admin-security.json")
 
 function createEmptyState(): AdminSecurityState {
   return {
@@ -53,52 +53,80 @@ function decodeBuffer(value: Base64URLString) {
   return new Uint8Array(Buffer.from(value, "base64url"))
 }
 
+async function readSecurityStateFromFile(): Promise<AdminSecurityState> {
+  try {
+    const fileContent = await readFile(SECURITY_FILE, "utf-8")
+    const parsed = JSON.parse(fileContent) as Partial<AdminSecurityState>
+    const hasUserID =
+      typeof parsed.webauthnUserID === "string" &&
+      parsed.webauthnUserID !== "replace-on-first-run"
+
+    if (hasUserID) {
+      return {
+        webauthnUserID: parsed.webauthnUserID as Base64URLString,
+        passkeys: Array.isArray(parsed.passkeys) ? parsed.passkeys : [],
+      } satisfies AdminSecurityState
+    }
+  } catch (error) {
+    console.error("Failed to read security state from file:", error)
+  }
+
+  return createEmptyState()
+}
+
+async function writeSecurityStateToFile(state: AdminSecurityState) {
+  try {
+    await writeFile(SECURITY_FILE, JSON.stringify(state, null, 2))
+  } catch (error) {
+    console.error("Failed to write security state to file:", error)
+  }
+}
+
 async function readSecurityState(): Promise<AdminSecurityState> {
   try {
-    if (!redis) {
-      // Fallback: return empty state if Redis not configured
-      return fallbackSecurityState || createEmptyState()
-    }
+    if (redis) {
+      const stored = await redis.get(SECURITY_KEY)
+      if (stored) {
+        const parsed = JSON.parse(stored as string) as Partial<AdminSecurityState>
+        const hasUserID =
+          typeof parsed.webauthnUserID === "string" &&
+          parsed.webauthnUserID !== "replace-on-first-run"
 
-    const stored = await redis.get(SECURITY_KEY)
-    if (stored) {
-      const parsed = JSON.parse(stored as string) as Partial<AdminSecurityState>
-      const hasUserID =
-        typeof parsed.webauthnUserID === "string" &&
-        parsed.webauthnUserID !== "replace-on-first-run"
-
-      if (hasUserID) {
-        return {
-          webauthnUserID: parsed.webauthnUserID as Base64URLString,
-          passkeys: Array.isArray(parsed.passkeys) ? parsed.passkeys : [],
-        } satisfies AdminSecurityState
+        if (hasUserID) {
+          return {
+            webauthnUserID: parsed.webauthnUserID as Base64URLString,
+            passkeys: Array.isArray(parsed.passkeys) ? parsed.passkeys : [],
+          } satisfies AdminSecurityState
+        }
       }
     }
 
-    const fallbackState = createEmptyState()
-    await writeSecurityState(fallbackState)
-    return fallbackState
+    // Fallback to file-based storage
+    const fileState = await readSecurityStateFromFile()
+    
+    if (fileState.passkeys.length > 0 || fileState.webauthnUserID !== createEmptyState().webauthnUserID) {
+      return fileState
+    }
+
+    const newState = createEmptyState()
+    await writeSecurityState(newState)
+    return newState
   } catch (error) {
     console.error("Failed to read security state:", error)
-    const fallbackState = createEmptyState()
-    fallbackSecurityState = fallbackState
-    return fallbackState
+    return createEmptyState()
   }
 }
 
 async function writeSecurityState(state: AdminSecurityState) {
   try {
-    if (!redis) {
-      // Fallback: store in memory
-      fallbackSecurityState = state
-      return
+    if (redis) {
+      await redis.set(SECURITY_KEY, JSON.stringify(state))
     }
 
-    await redis.set(SECURITY_KEY, JSON.stringify(state))
+    // Always write to file as well
+    await writeSecurityStateToFile(state)
   } catch (error) {
     console.error("Failed to write security state:", error)
-    // Still store in memory as fallback
-    fallbackSecurityState = state
   }
 }
 
@@ -198,5 +226,11 @@ export async function updateAdminPasskeyCounter(input: {
       : passkey,
   )
 
+  await writeSecurityState(state)
+}
+
+export async function resetAdminPasskeys() {
+  const state = await readSecurityState()
+  state.passkeys = []
   await writeSecurityState(state)
 }
