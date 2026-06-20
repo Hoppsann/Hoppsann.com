@@ -1,0 +1,81 @@
+body {
+    margin: 2rem;
+    display: flex;
+    flex-direction: column;
+}
+
+:root {
+    --debugbackgroundcolor: rgba(255, 0, 0, 0.514);
+    --backgroundcolor: rgb(211, 211, 211);
+    --cardColor: linear-gradient(146deg, rgba(97, 197, 255, 1) 0%, rgba(10, 4, 71, 1) 100%);
+}
+
+.hero {
+    width: 100%;
+    height: 30rem;
+    display: flex;
+    gap: 4rem;
+    background-color: var(--debugbackgroundcolor);
+}
+
+#heroImage {
+    background-color: var(--backgroundcolor);
+    width: 250%;
+    border-radius: 999rem;
+    overflow: hidden;
+}
+
+#heroInfo {
+    background-color: var(--backgroundcolor);
+    width: 200rem;
+    padding: 2rem;
+    border-radius: 3rem;
+}
+
+/* cards */
+
+.cards {
+    margin-top: 4rem;
+    background-color: var(--debugbackgroundcolor);
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+}
+
+.cards > div {
+    background: var(--cardColor);
+    width: 28rem;
+    height: 35rem;
+    border-radius: 3rem;
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.1s ease-out;
+}
+
+.card-content {
+    position: relative;
+    z-index: 2;
+}
+
+.glare {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: radial-gradient(circle, white 0%, rgba(255, 255, 255, 0.6) 50%, transparent 100%);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+    transition: opacity 0.2s ease-out;
+}
+
+.card2 {
+    margin-top: 2rem;
+}
+
+.card3 {
+    margin-top: 4rem;
+}
