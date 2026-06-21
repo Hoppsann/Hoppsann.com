@@ -1,7 +1,7 @@
 window.addEventListener("DOMContentLoaded", () => {
 
   // =========================
-  // CURSOR (spring + momentum)
+  // CURSOR (spring physics)
   // =========================
 
   const cursor = document.getElementById("cursor");
@@ -25,30 +25,36 @@ window.addEventListener("DOMContentLoaded", () => {
   let cvx = 0;
   let cvy = 0;
 
-  let cAngle = 0;
+  let angle = 0;
 
   window.addEventListener("mousemove", (e) => {
     mouseX = e.clientX;
     mouseY = e.clientY;
   });
 
+  let lastCursorTime = performance.now();
+
   function animateCursor() {
+    const now = performance.now();
+    const dt = (now - lastCursorTime) / 16.666;
+    lastCursorTime = now;
+
     let dx = mouseX - cx;
     let dy = mouseY - cy;
 
-    cvx += dx * CURSOR_CONFIG.stiffness;
-    cvy += dy * CURSOR_CONFIG.stiffness;
+    cvx += dx * CURSOR_CONFIG.stiffness * dt;
+    cvy += dy * CURSOR_CONFIG.stiffness * dt;
 
-    cvx *= CURSOR_CONFIG.friction;
-    cvy *= CURSOR_CONFIG.friction;
+    cvx *= Math.pow(CURSOR_CONFIG.friction, dt);
+    cvy *= Math.pow(CURSOR_CONFIG.friction, dt);
 
-    cx += cvx;
-    cy += cvy;
+    cx += cvx * dt;
+    cy += cvy * dt;
 
     let speed = Math.sqrt(cvx * cvx + cvy * cvy);
 
     if (speed > 0.1) {
-      cAngle = Math.atan2(cvy, cvx) * 180 / Math.PI;
+      angle = Math.atan2(cvy, cvx) * 180 / Math.PI;
     }
 
     let stretch = 1 + speed * CURSOR_CONFIG.stretch;
@@ -58,9 +64,13 @@ window.addEventListener("DOMContentLoaded", () => {
 
     cursor.style.transform = `
       translate(-50%, -50%)
-      rotate(${cAngle}deg)
+      rotate(${angle}deg)
       scale(${stretch}, ${1 / stretch})
     `;
+
+    // expose SPRING CURSOR
+    window.springX = cx;
+    window.springY = cy;
 
     requestAnimationFrame(animateCursor);
   }
@@ -69,7 +79,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 
   // =========================
-  // THREE FACE (spring + inertia)
+  // THREE FACE (uses spring cursor)
   // =========================
 
   import("three").then(THREE => {
@@ -94,8 +104,8 @@ window.addEventListener("DOMContentLoaded", () => {
         baseRotationX: 0,
         mouseRotationStrength: 0.3,
 
-        rotationSpring: 0.075,
-        rotationDamping: 0.9,
+        rotationSpring: 0.2,
+        rotationDamping: 0.8,
 
         cameraFovMobile: 40,
         cameraFovDesktop: 25,
@@ -116,7 +126,12 @@ window.addEventListener("DOMContentLoaded", () => {
         CONFIG.cameraFar
       );
 
-      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      const renderer = new THREE.WebGLRenderer({
+        canvas,
+        alpha: true,
+        antialias: true
+      });
+
       renderer.setSize(container.clientWidth, container.clientHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
 
@@ -125,19 +140,11 @@ window.addEventListener("DOMContentLoaded", () => {
       let mx = 0;
       let my = 0;
 
-      window.addEventListener('mousemove', (event) => {
-        const rect = container.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-
-        mx = (event.clientX - cx) / (rect.width / 2);
-        my = (event.clientY - cy) / (rect.height / 2);
-      });
-
       let rotVX = 0;
       let rotVY = 0;
 
       const loader = new GLTFLoader();
+
       loader.load(CONFIG.modelPath, (gltf) => {
 
         let mesh = null;
@@ -188,8 +195,25 @@ window.addEventListener("DOMContentLoaded", () => {
         camera.position.z = radius * CONFIG.cameraDistanceMultiplier;
       });
 
+      let lastFaceTime = performance.now();
+
       function animateFace() {
         requestAnimationFrame(animateFace);
+
+        const now = performance.now();
+        const dt = (now - lastFaceTime) / 16.666;
+        lastFaceTime = now;
+
+        // spring cursor → face input
+        const sx = window.springX || 0;
+        const sy = window.springY || 0;
+
+        const rect = container.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+
+        mx = (sx - cx) / (rect.width / 2);
+        my = (sy - cy) / (rect.height / 2);
 
         if (group) {
 
@@ -199,14 +223,14 @@ window.addEventListener("DOMContentLoaded", () => {
           let dx = targetY - group.rotation.y;
           let dy = targetX - group.rotation.x;
 
-          rotVX += dx * CONFIG.rotationSpring;
-          rotVY += dy * CONFIG.rotationSpring;
+          rotVX += dx * CONFIG.rotationSpring * dt;
+          rotVY += dy * CONFIG.rotationSpring * dt;
 
-          rotVX *= CONFIG.rotationDamping;
-          rotVY *= CONFIG.rotationDamping;
+          rotVX *= Math.pow(CONFIG.rotationDamping, dt);
+          rotVY *= Math.pow(CONFIG.rotationDamping, dt);
 
-          group.rotation.y += rotVX;
-          group.rotation.x += rotVY;
+          group.rotation.y += rotVX * dt;
+          group.rotation.x += rotVY * dt;
         }
 
         renderer.render(scene, camera);
@@ -222,5 +246,77 @@ window.addEventListener("DOMContentLoaded", () => {
 
     });
   });
+
+
+  // =========================
+  // CARDS (FOLLOW SPRING CURSOR)
+  // =========================
+
+  const cards = document.querySelectorAll(".cards > div");
+
+  const maxTiltDegree = 5;
+  const maxGlareOpacity = 0.2;
+  const outsideThreshold = 200;
+
+  function clamp(v, min, max) {
+    return Math.min(Math.max(v, min), max);
+  }
+
+  function distanceToRect(px, py, rect) {
+    const dx = Math.max(rect.left - px, 0, px - rect.right);
+    const dy = Math.max(rect.top - py, 0, py - rect.bottom);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  let lastCardTime = performance.now();
+
+  function animateCards() {
+
+    const now = performance.now();
+    const dt = (now - lastCardTime) / 16.666;
+    lastCardTime = now;
+
+    const x = window.springX || 0;
+    const y = window.springY || 0;
+
+    cards.forEach(card => {
+
+      const glare = card.querySelector(".glare");
+      const rect = card.getBoundingClientRect();
+
+      const hw = rect.width / 2;
+      const hh = rect.height / 2;
+
+      const cx = rect.left + hw;
+      const cy = rect.top + hh;
+
+      const dx = x - cx;
+      const dy = y - cy;
+
+      const rx = clamp(dy / hh, -1, 1);
+      const ry = clamp(dx / hw, -1, 1);
+
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const norm = clamp(dist / Math.max(hw, hh), 0, 1);
+
+      const outside = distanceToRect(x, y, rect);
+      const intensity = 1 - clamp(outside / outsideThreshold, 0, 1);
+
+      const degree = norm * maxTiltDegree * intensity;
+
+      card.style.transform =
+        `perspective(400px) rotate3d(${-rx}, ${ry}, 0, ${degree}deg)`;
+
+      glare.style.transform =
+        `translate(${-ry * 100}%, ${-rx * 100}%) scale(5)`;
+
+      glare.style.opacity =
+        norm * maxTiltDegree * 0.04 * intensity;
+    });
+
+    requestAnimationFrame(animateCards);
+  }
+
+  animateCards();
 
 });
