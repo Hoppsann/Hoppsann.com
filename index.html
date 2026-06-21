@@ -1,15 +1,25 @@
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
     <link rel="stylesheet" href="/css/main.css">
-    <script src="./js/script.js" defer></script>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.184.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.184.0/examples/jsm/"
+      }
+    }
+    </script>
+    <script type="module" src="./js/script.js"></script>
 </head>
 <body>
     <div class="hero">
-        <div id="heroImage">
-
+        <div id="heroFace">
+            <canvas id="face"></canvas>
         </div>
         <div id="heroInfo">
             <h1>Even Bjerke Pettersen</h1>
@@ -39,8 +49,8 @@
             <div class="glare"></div>
             <div class="card-content">
                 <h2>IT</h2>
+            </div>
         </div>
     </div>
-</div>
 </body>
 </html>

@@ -5,7 +5,7 @@ body {
 }
 
 :root {
-    --debugbackgroundcolor: rgba(255, 0, 0, 0.514);
+    --debugbackgroundcolor: rgba(255, 0, 0, 0.507);
     --backgroundcolor: rgb(211, 211, 211);
     --cardColor: linear-gradient(146deg, rgba(97, 197, 255, 1) 0%, rgba(10, 4, 71, 1) 100%);
 }
@@ -18,18 +18,27 @@ body {
     background-color: var(--debugbackgroundcolor);
 }
 
-#heroImage {
-    background-color: var(--backgroundcolor);
-    width: 250%;
-    border-radius: 999rem;
-    overflow: hidden;
-}
-
 #heroInfo {
     background-color: var(--backgroundcolor);
     width: 200rem;
     padding: 2rem;
     border-radius: 3rem;
+}
+
+/* hero face */
+
+#heroFace {
+    background-color: var(--backgroundcolor);
+    width: 250%;
+    border-radius: 999rem;
+    overflow: hidden;
+    position: relative;
+}
+
+#face {
+    width: 100%;
+    height: 100%;
+    display: block;
 }
 
 /* cards */
