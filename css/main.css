@@ -28,6 +28,41 @@ body {
   mix-blend-mode: difference;
 }
 
+/* theme transition */
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 2;
+  clip-path: circle(0px at var(--transition-x, 50%) var(--transition-y, 50%));
+  animation: circle-reveal 0.7s ease-in-out forwards;
+}
+
+@keyframes circle-reveal {
+  to {
+    clip-path: circle(var(--transition-radius, 150%) at var(--transition-x, 50%) var(--transition-y, 50%));
+  }
+}
+
+body.theme-capture {
+  background-color: rgb(0, 0, 0);
+}
+
+body.theme-create {
+  background-color: #f02247;
+}
+
+body.theme-code {
+  background-color: #001a0d;
+}
 
 /* hero */
 

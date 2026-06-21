@@ -95,6 +95,40 @@ window.addEventListener("DOMContentLoaded", () => {
 
 
   // =========================
+  // THEME TRANSITION (circle reveal via View Transitions API)
+  // =========================
+
+  function applyTheme(themeName) {
+    document.body.classList.remove('theme-capture', 'theme-create', 'theme-code');
+    document.body.classList.add(`theme-${themeName}`);
+
+    if (window.setFaceStyle) {
+      window.setFaceStyle(themeName);
+    }
+  }
+
+  function triggerThemeTransition(clickX, clickY, themeName) {
+    // fallback for nettlesere uten støtte - bare bytt tema direkte
+    if (!document.startViewTransition) {
+      applyTheme(themeName);
+      return;
+    }
+
+    const maxX = Math.max(clickX, window.innerWidth - clickX);
+    const maxY = Math.max(clickY, window.innerHeight - clickY);
+    const radius = Math.sqrt(maxX * maxX + maxY * maxY);
+
+    document.documentElement.style.setProperty('--transition-x', `${clickX}px`);
+    document.documentElement.style.setProperty('--transition-y', `${clickY}px`);
+    document.documentElement.style.setProperty('--transition-radius', `${radius}px`);
+
+    document.startViewTransition(() => {
+      applyTheme(themeName);
+    });
+  }
+
+
+  // =========================
   // THREE FACE
   // =========================
 
@@ -116,18 +150,16 @@ window.addEventListener("DOMContentLoaded", () => {
         wireframeColor: 0xede7d8,
         wireframeOpacity: 0.3,
 
-        // voxel-stil (Create-kortet)
-        voxelSize: 0.025,          // multipliseres med modellens radius - styrer kubestørrelse
-        voxelColor: 0xe6cf97,
-        voxelSampleCount: 110000,  // antall sample-punkter over overflaten - høyere = færre hull
-        voxelRoughness: 0.6,
+        voxelSize: 0.03,
+        voxelColor: 0x3bb0ff,
+        voxelSampleCount: 150000,
+        voxelRoughness: 0.4,
         voxelMetalness: 0.1,
-        voxelCornerRadius: 0.2,  // andel av voxelSize - styrer hvor runde kantene er
-        voxelSegments: 2,         // segmenter per kant - høyere = mykere avrunding, tyngre å rendre
+        voxelCornerRadius: 0.2,
+        voxelSegments: 2,
 
-        // lys
         ambientLightColor: 0xffffff,
-        ambientLightIntensity: 0.6,
+        ambientLightIntensity: 1,
         directionalLightColor: 0xffffff,
         directionalLightIntensity: 1.2,
 
@@ -162,7 +194,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const directionalLight = new THREE.DirectionalLight(
         CONFIG.directionalLightColor, CONFIG.directionalLightIntensity
       );
-      directionalLight.position.set(1, 1, 1);
+      directionalLight.position.set(0, -2, 4);
       scene.add(directionalLight);
 
       const camera = new THREE.PerspectiveCamera(
@@ -191,9 +223,6 @@ window.addEventListener("DOMContentLoaded", () => {
       let rotVX = 0;
       let rotVY = 0;
 
-      // bygger solid voxel-form ved å sample tett over hele overflaten
-      // og snappe sample-punktene til et rutenett - ingen hull selv om
-      // original punktsky var glissen. Kubene får avrundede kanter.
       function buildVoxelMesh(mesh, voxelSize, color, sampleCount, cornerRadius, segments) {
         const sampler = new MeshSurfaceSampler(mesh).build();
         const tempPosition = new THREE.Vector3();
@@ -245,15 +274,25 @@ window.addEventListener("DOMContentLoaded", () => {
       function setActiveStyle(styleName) {
         if (!pointsWireGroup || !voxelGroup) return;
 
-        pointsWireGroup.visible = styleName === 'capture';
-        voxelGroup.visible = styleName === 'create';
-        // 'code'-stil kommer senere
+        if (styleName === 'create') {
+          pointsWireGroup.visible = false;
+          voxelGroup.visible = true;
+        } else {
+          pointsWireGroup.visible = true;
+          voxelGroup.visible = false;
+        }
       }
 
-      document.querySelector('.card1').addEventListener('click', () => setActiveStyle('capture'));
-      document.querySelector('.card2').addEventListener('click', () => setActiveStyle('create'));
-      document.querySelector('.card3').addEventListener('click', () => {
-        // legges til senere
+      window.setFaceStyle = setActiveStyle;
+
+      document.querySelector('.card1').addEventListener('click', (e) => {
+        triggerThemeTransition(e.clientX, e.clientY, 'capture');
+      });
+      document.querySelector('.card2').addEventListener('click', (e) => {
+        triggerThemeTransition(e.clientX, e.clientY, 'create');
+      });
+      document.querySelector('.card3').addEventListener('click', (e) => {
+        triggerThemeTransition(e.clientX, e.clientY, 'code');
       });
 
       const loader = new GLTFLoader();
@@ -274,7 +313,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
         group = new THREE.Group();
 
-        // ---- capture-stil: punkter + wireframe ----
         pointsWireGroup = new THREE.Group();
 
         const points = new THREE.Points(
@@ -298,7 +336,6 @@ window.addEventListener("DOMContentLoaded", () => {
         pointsWireGroup.add(points);
         pointsWireGroup.add(wire);
 
-        // ---- create-stil: solid voxel-kuber med avrundede kanter ----
         voxelGroup = new THREE.Group();
         const voxelMesh = buildVoxelMesh(
           mesh,
@@ -309,7 +346,7 @@ window.addEventListener("DOMContentLoaded", () => {
           CONFIG.voxelSegments
         );
         voxelGroup.add(voxelMesh);
-        voxelGroup.visible = false; // skjult som standard
+        voxelGroup.visible = false;
 
         group.add(pointsWireGroup);
         group.add(voxelGroup);
