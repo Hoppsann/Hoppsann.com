@@ -3,6 +3,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+// Define the breakpoint media query
+const mobileMediaQuery = window.matchMedia('(max-width: 768px)');
+
 const CONFIG = {
   modelPath: '/models/face.glb',
 
@@ -26,7 +29,8 @@ const CONFIG = {
   rotationSmoothing: 0.1,    // 0-1 - lavere = tregere/mykere bevegelse
 
   // kamera
-  cameraFov: 25,
+  cameraFovMobile: 40,        // FOV verdi for telefoner (juster etter behov)
+  cameraFovDesktop: 25,       // FOV verdi for PC
   cameraNear: 0.1,
   cameraFar: 100,
   cameraDistanceMultiplier: 2.5, // multipliseres med modellens radius
@@ -40,8 +44,11 @@ const container = document.querySelector('#heroFace');
 
 const scene = new THREE.Scene();
 
+// Set initial FOV dynamically based on screen width on load
+const initialFov = mobileMediaQuery.matches ? CONFIG.cameraFovMobile : CONFIG.cameraFovDesktop;
+
 const camera = new THREE.PerspectiveCamera(
-  CONFIG.cameraFov,
+  initialFov,
   container.clientWidth / container.clientHeight,
   CONFIG.cameraNear,
   CONFIG.cameraFar
@@ -144,8 +151,13 @@ function animate() {
 animate();
 
 function resizeFace() {
+  // Update camera FOV based on current window width boundaries
+  camera.fov = mobileMediaQuery.matches ? CONFIG.cameraFovMobile : CONFIG.cameraFovDesktop;
+  
+  // Re-calculate the matrix and boundaries for Three.js
   camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
+  
   renderer.setSize(container.clientWidth, container.clientHeight);
 }
 
