@@ -136,8 +136,9 @@ window.addEventListener("DOMContentLoaded", () => {
     Promise.all([
       import("three/addons/loaders/GLTFLoader.js"),
       import("three/addons/math/MeshSurfaceSampler.js"),
-      import("three/addons/geometries/RoundedBoxGeometry.js")
-    ]).then(([{ GLTFLoader }, { MeshSurfaceSampler }, { RoundedBoxGeometry }]) => {
+      import("three/addons/geometries/RoundedBoxGeometry.js"),
+      import("three/addons/effects/AsciiEffect.js")
+    ]).then(([{ GLTFLoader }, { MeshSurfaceSampler }, { RoundedBoxGeometry }, { AsciiEffect }]) => {
 
       const mobileMediaQuery = window.matchMedia('(max-width: 768px)');
 
@@ -150,6 +151,10 @@ window.addEventListener("DOMContentLoaded", () => {
         wireframeColor: 0xede7d8,
         wireframeOpacity: 0.3,
 
+        captureSolidColor: 0xc0dceb,
+        captureSolidRoughness: 0.45,
+        captureSolidMetalness: 0.1,
+
         voxelSize: 0.03,
         voxelColor: 0x3bb0ff,
         voxelSampleCount: 150000,
@@ -158,10 +163,17 @@ window.addEventListener("DOMContentLoaded", () => {
         voxelCornerRadius: 0.2,
         voxelSegments: 2,
 
+        asciiCharacters: ' .,:;i!lI1?][}{|/\\tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
+        asciiColor: '#c8ffd8',
+        asciiBackground: 'transparent',
+        asciiResolution: 0.105,
+        asciiOffsetX: '-4.5%',
+        asciiScaleX: 0.94,
+
         ambientLightColor: 0xffffff,
         ambientLightIntensity: 1,
         directionalLightColor: 0xffffff,
-        directionalLightIntensity: 1.2,
+        directionalLightIntensity: 1.8,
 
         modelOffsetX: 0,
         modelOffsetY: 0.01,
@@ -213,9 +225,25 @@ window.addEventListener("DOMContentLoaded", () => {
       renderer.setSize(container.clientWidth, container.clientHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
 
+      const asciiEffect = new AsciiEffect(renderer, CONFIG.asciiCharacters, {
+        invert: false,
+        resolution: CONFIG.asciiResolution
+      });
+      asciiEffect.setSize(container.clientWidth, container.clientHeight);
+      asciiEffect.domElement.id = 'asciiFace';
+      asciiEffect.domElement.style.color = CONFIG.asciiColor;
+      asciiEffect.domElement.style.backgroundColor = CONFIG.asciiBackground;
+      asciiEffect.domElement.style.display = 'none';
+      asciiEffect.domElement.style.setProperty('--ascii-offset-x', CONFIG.asciiOffsetX);
+      asciiEffect.domElement.style.setProperty('--ascii-scale-x', CONFIG.asciiScaleX);
+      container.appendChild(asciiEffect.domElement);
+
       let group;
       let pointsWireGroup;
+      let solidGroup;
       let voxelGroup;
+      let asciiGroup;
+      let activeFaceStyle = 'default';
 
       let mx = 0;
       let my = 0;
@@ -272,14 +300,33 @@ window.addEventListener("DOMContentLoaded", () => {
       }
 
       function setActiveStyle(styleName) {
-        if (!pointsWireGroup || !voxelGroup) return;
+        activeFaceStyle = styleName;
+        canvas.style.display = 'block';
+        canvas.style.opacity = styleName === 'code' ? '0.36' : '1';
+        asciiEffect.domElement.style.display = styleName === 'code' ? 'block' : 'none';
+
+        if (!pointsWireGroup || !solidGroup || !voxelGroup || !asciiGroup) return;
 
         if (styleName === 'create') {
           pointsWireGroup.visible = false;
+          solidGroup.visible = false;
           voxelGroup.visible = true;
+          asciiGroup.visible = false;
+        } else if (styleName === 'capture') {
+          pointsWireGroup.visible = false;
+          solidGroup.visible = true;
+          voxelGroup.visible = false;
+          asciiGroup.visible = false;
+        } else if (styleName === 'code') {
+          pointsWireGroup.visible = false;
+          solidGroup.visible = false;
+          voxelGroup.visible = false;
+          asciiGroup.visible = true;
         } else {
           pointsWireGroup.visible = true;
+          solidGroup.visible = false;
           voxelGroup.visible = false;
+          asciiGroup.visible = false;
         }
       }
 
@@ -336,6 +383,18 @@ window.addEventListener("DOMContentLoaded", () => {
         pointsWireGroup.add(points);
         pointsWireGroup.add(wire);
 
+        solidGroup = new THREE.Group();
+        const solidMesh = new THREE.Mesh(
+          geometry,
+          new THREE.MeshStandardMaterial({
+            color: CONFIG.captureSolidColor,
+            roughness: CONFIG.captureSolidRoughness,
+            metalness: CONFIG.captureSolidMetalness,
+          })
+        );
+        solidGroup.add(solidMesh);
+        solidGroup.visible = false;
+
         voxelGroup = new THREE.Group();
         const voxelMesh = buildVoxelMesh(
           mesh,
@@ -348,8 +407,38 @@ window.addEventListener("DOMContentLoaded", () => {
         voxelGroup.add(voxelMesh);
         voxelGroup.visible = false;
 
+        asciiGroup = new THREE.Group();
+        const asciiMesh = new THREE.Mesh(
+          geometry,
+          new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            side: THREE.DoubleSide,
+          })
+        );
+        const asciiShadow = new THREE.Mesh(
+          geometry,
+          new THREE.MeshBasicMaterial({
+            color: 0x707070,
+            side: THREE.BackSide,
+          })
+        );
+        const asciiWire = new THREE.LineSegments(
+          new THREE.WireframeGeometry(geometry),
+          new THREE.LineBasicMaterial({
+            color: 0x8f8f8f,
+            transparent: true,
+            opacity: 0.45,
+          })
+        );
+        asciiGroup.add(asciiShadow);
+        asciiGroup.add(asciiMesh);
+        asciiGroup.add(asciiWire);
+        asciiGroup.visible = false;
+
         group.add(pointsWireGroup);
+        group.add(solidGroup);
         group.add(voxelGroup);
+        group.add(asciiGroup);
 
         group.position.set(
           CONFIG.modelOffsetX,
@@ -362,6 +451,7 @@ window.addEventListener("DOMContentLoaded", () => {
         scene.add(group);
 
         camera.position.z = radius * CONFIG.cameraDistanceMultiplier;
+        setActiveStyle(activeFaceStyle);
       });
 
       function animateFace() {
@@ -392,7 +482,22 @@ window.addEventListener("DOMContentLoaded", () => {
           group.rotation.x += rotVY;
         }
 
-        renderer.render(scene, camera);
+        if (activeFaceStyle === 'code') {
+          asciiEffect.render(scene, camera);
+
+          if (pointsWireGroup && solidGroup && voxelGroup && asciiGroup) {
+            pointsWireGroup.visible = true;
+            solidGroup.visible = false;
+            voxelGroup.visible = false;
+            asciiGroup.visible = false;
+            renderer.render(scene, camera);
+            pointsWireGroup.visible = false;
+            solidGroup.visible = false;
+            asciiGroup.visible = true;
+          }
+        } else {
+          renderer.render(scene, camera);
+        }
       }
 
       animateFace();
@@ -401,6 +506,7 @@ window.addEventListener("DOMContentLoaded", () => {
         camera.aspect = container.clientWidth / container.clientHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(container.clientWidth, container.clientHeight);
+        asciiEffect.setSize(container.clientWidth, container.clientHeight);
       });
 
     });
