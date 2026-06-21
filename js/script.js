@@ -188,7 +188,7 @@ window.addEventListener("DOMContentLoaded", () => {
         directionalLightIntensity: 1.8,
 
         modelOffsetX: 0,
-        modelOffsetY: 0.01,
+        modelOffsetY: -0.01,
         modelOffsetZ: 0,
 
         baseRotationY: Math.PI - 0.1,
@@ -198,11 +198,12 @@ window.addEventListener("DOMContentLoaded", () => {
         rotationSpring: 0.05,
         rotationDamping: 0.92,
 
-        cameraFovMobile: 40,
-        cameraFovDesktop: 25,
+        cameraFovMobile: 50,
+        cameraFovDesktop: 45,
         cameraNear: 0.1,
         cameraFar: 100,
         cameraDistanceMultiplier: 2.5,
+        renderAreaScaleY: 1.45,
       };
 
       const canvas = document.querySelector('#face');
@@ -234,14 +235,13 @@ window.addEventListener("DOMContentLoaded", () => {
         antialias: true
       });
 
-      renderer.setSize(container.clientWidth, container.clientHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setClearColor(0x000000, 0);
 
       const asciiEffect = new AsciiEffect(renderer, CONFIG.asciiCharacters, {
         invert: false,
         resolution: CONFIG.asciiResolution
       });
-      asciiEffect.setSize(container.clientWidth, container.clientHeight);
       asciiEffect.domElement.id = 'asciiFace';
       asciiEffect.domElement.style.color = CONFIG.asciiColor;
       asciiEffect.domElement.style.backgroundColor = CONFIG.asciiBackground;
@@ -249,6 +249,23 @@ window.addEventListener("DOMContentLoaded", () => {
       asciiEffect.domElement.style.setProperty('--ascii-offset-x', CONFIG.asciiOffsetX);
       asciiEffect.domElement.style.setProperty('--ascii-scale-x', CONFIG.asciiScaleX);
       container.appendChild(asciiEffect.domElement);
+
+      function resizeFaceRenderer() {
+        const renderWidth = container.clientWidth;
+        const renderHeight = container.clientHeight * CONFIG.renderAreaScaleY;
+
+        camera.aspect = renderWidth / renderHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(renderWidth, renderHeight, false);
+        asciiEffect.setSize(renderWidth, renderHeight);
+
+        canvas.style.width = '100%';
+        canvas.style.height = `${CONFIG.renderAreaScaleY * 100}%`;
+        asciiEffect.domElement.style.width = '100%';
+        asciiEffect.domElement.style.height = `${CONFIG.renderAreaScaleY * 100}%`;
+      }
+
+      resizeFaceRenderer();
 
       let group;
       let pointsWireGroup;
@@ -520,10 +537,7 @@ window.addEventListener("DOMContentLoaded", () => {
       requestAnimationFrame(animateFace);
 
       window.addEventListener('resize', () => {
-        camera.aspect = container.clientWidth / container.clientHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        asciiEffect.setSize(container.clientWidth, container.clientHeight);
+        resizeFaceRenderer();
       });
 
     });
