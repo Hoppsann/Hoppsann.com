@@ -1,7 +1,39 @@
-// ---------- hero face ----------
+// ---------- hero face: kontroll-variabler ----------
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const CONFIG = {
+  modelPath: '/models/face.glb',
+
+  // punkter
+  pointColor: 0x0a0447,
+  pointSize: 0.02,            // multipliseres med modellens radius
+
+  // wireframe-linjer
+  wireframeColor: 0x0a0447,
+  wireframeOpacity: 0.4,
+
+  // posisjon (offset fra senter, etter at modellen er sentrert)
+  modelOffsetX: 0,
+  modelOffsetY: 0,
+  modelOffsetZ: 0,
+
+  // rotasjon
+  baseRotationY: Math.PI,     // 180° - retningsfiks (peker feil vei uten denne)
+  baseRotationX: 0,
+  mouseRotationStrength: 0.3, // radianer - hvor mye den roterer mot musepekeren
+  rotationSmoothing: 0.05,    // 0-1 - lavere = tregere/mykere bevegelse
+
+  // kamera
+  cameraFov: 50,
+  cameraNear: 0.1,
+  cameraFar: 100,
+  cameraDistanceMultiplier: 2.5, // multipliseres med modellens radius
+};
+
+
+// ---------- oppsett ----------
 
 const canvas = document.querySelector('#face');
 const container = document.querySelector('#heroFace');
@@ -9,10 +41,10 @@ const container = document.querySelector('#heroFace');
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(
-  50,
+  CONFIG.cameraFov,
   container.clientWidth / container.clientHeight,
-  0.1,
-  100
+  CONFIG.cameraNear,
+  CONFIG.cameraFar
 );
 camera.position.z = 5;
 
@@ -20,8 +52,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true 
 renderer.setSize(container.clientWidth, container.clientHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 
-let group; // gjøres tilgjengelig utenfor loader-callbacken
-const baseRotationY = Math.PI; // 180°-fiksen fra før
+let group;
 
 let mouseX = 0;
 let mouseY = 0;
@@ -33,7 +64,7 @@ window.addEventListener('mousemove', (event) => {
 
 const loader = new GLTFLoader();
 loader.load(
-  '/models/face.glb',
+  CONFIG.modelPath,
   (gltf) => {
     let mesh = null;
     gltf.scene.traverse((child) => {
@@ -56,8 +87,8 @@ loader.load(
     const points = new THREE.Points(
       geometry,
       new THREE.PointsMaterial({
-        size: radius * 0.02,
-        color: 0x0a0447,
+        size: radius * CONFIG.pointSize,
+        color: CONFIG.pointColor,
         sizeAttenuation: true,
       })
     );
@@ -67,33 +98,33 @@ loader.load(
     const wireframe = new THREE.LineSegments(
       wireframeGeometry,
       new THREE.LineBasicMaterial({
-        color: 0x0a0447,
+        color: CONFIG.wireframeColor,
         transparent: true,
-        opacity: 0.4,
+        opacity: CONFIG.wireframeOpacity,
       })
     );
     group.add(wireframe);
 
-    group.rotation.y = baseRotationY; // startrotasjon, før lerp tar over
+    group.position.set(CONFIG.modelOffsetX, CONFIG.modelOffsetY, CONFIG.modelOffsetZ);
+    group.rotation.y = CONFIG.baseRotationY;
+    group.rotation.x = CONFIG.baseRotationX;
     scene.add(group);
 
-    camera.position.z = radius * 2.5;
+    camera.position.z = radius * CONFIG.cameraDistanceMultiplier;
   },
   undefined,
   (error) => console.error('Feil ved lasting av modell:', error)
 );
 
-const maxRotation = 0.3; // radianer – juster for mer/mindre bevegelse
-
 function animate() {
   requestAnimationFrame(animate);
 
   if (group) {
-    const targetRotationY = baseRotationY + mouseX * maxRotation;
-    const targetRotationX = mouseY * maxRotation;
+    const targetRotationY = CONFIG.baseRotationY + mouseX * CONFIG.mouseRotationStrength;
+    const targetRotationX = CONFIG.baseRotationX + mouseY * CONFIG.mouseRotationStrength;
 
-    group.rotation.y += (targetRotationY - group.rotation.y) * 0.05;
-    group.rotation.x += (targetRotationX - group.rotation.x) * 0.05;
+    group.rotation.y += (targetRotationY - group.rotation.y) * CONFIG.rotationSmoothing;
+    group.rotation.x += (targetRotationX - group.rotation.x) * CONFIG.rotationSmoothing;
   }
 
   renderer.render(scene, camera);
