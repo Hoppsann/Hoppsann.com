@@ -65,10 +65,8 @@ window.addEventListener("DOMContentLoaded", () => {
       angle = Math.atan2(cvy, cvx) * 180 / Math.PI;
     }
 
-    // movement stretch
     let moveStretch = 1 + speed * CURSOR_CONFIG.stretch;
 
-    // click spring
     const targetClick = isDown ? CURSOR_CONFIG.clickScale : 1;
 
     clickV += (targetClick - clickScale) * CURSOR_CONFIG.clickSpring;
@@ -101,7 +99,11 @@ window.addEventListener("DOMContentLoaded", () => {
   // =========================
 
   import("three").then(THREE => {
-    import("three/addons/loaders/GLTFLoader.js").then(({ GLTFLoader }) => {
+    Promise.all([
+      import("three/addons/loaders/GLTFLoader.js"),
+      import("three/addons/math/MeshSurfaceSampler.js"),
+      import("three/addons/geometries/RoundedBoxGeometry.js")
+    ]).then(([{ GLTFLoader }, { MeshSurfaceSampler }, { RoundedBoxGeometry }]) => {
 
       const mobileMediaQuery = window.matchMedia('(max-width: 768px)');
 
@@ -113,6 +115,21 @@ window.addEventListener("DOMContentLoaded", () => {
 
         wireframeColor: 0xede7d8,
         wireframeOpacity: 0.3,
+
+        // voxel-stil (Create-kortet)
+        voxelSize: 0.025,          // multipliseres med modellens radius - styrer kubestørrelse
+        voxelColor: 0xe6cf97,
+        voxelSampleCount: 110000,  // antall sample-punkter over overflaten - høyere = færre hull
+        voxelRoughness: 0.6,
+        voxelMetalness: 0.1,
+        voxelCornerRadius: 0.2,  // andel av voxelSize - styrer hvor runde kantene er
+        voxelSegments: 2,         // segmenter per kant - høyere = mykere avrunding, tyngre å rendre
+
+        // lys
+        ambientLightColor: 0xffffff,
+        ambientLightIntensity: 0.6,
+        directionalLightColor: 0xffffff,
+        directionalLightIntensity: 1.2,
 
         modelOffsetX: 0,
         modelOffsetY: 0.01,
@@ -137,6 +154,17 @@ window.addEventListener("DOMContentLoaded", () => {
 
       const scene = new THREE.Scene();
 
+      const ambientLight = new THREE.AmbientLight(
+        CONFIG.ambientLightColor, CONFIG.ambientLightIntensity
+      );
+      scene.add(ambientLight);
+
+      const directionalLight = new THREE.DirectionalLight(
+        CONFIG.directionalLightColor, CONFIG.directionalLightIntensity
+      );
+      directionalLight.position.set(1, 1, 1);
+      scene.add(directionalLight);
+
       const camera = new THREE.PerspectiveCamera(
         mobileMediaQuery.matches ? CONFIG.cameraFovMobile : CONFIG.cameraFovDesktop,
         container.clientWidth / container.clientHeight,
@@ -154,12 +182,79 @@ window.addEventListener("DOMContentLoaded", () => {
       renderer.setPixelRatio(window.devicePixelRatio);
 
       let group;
+      let pointsWireGroup;
+      let voxelGroup;
 
       let mx = 0;
       let my = 0;
 
       let rotVX = 0;
       let rotVY = 0;
+
+      // bygger solid voxel-form ved å sample tett over hele overflaten
+      // og snappe sample-punktene til et rutenett - ingen hull selv om
+      // original punktsky var glissen. Kubene får avrundede kanter.
+      function buildVoxelMesh(mesh, voxelSize, color, sampleCount, cornerRadius, segments) {
+        const sampler = new MeshSurfaceSampler(mesh).build();
+        const tempPosition = new THREE.Vector3();
+
+        const voxelMap = new Map();
+
+        for (let i = 0; i < sampleCount; i++) {
+          sampler.sample(tempPosition);
+
+          const vx = Math.round(tempPosition.x / voxelSize);
+          const vy = Math.round(tempPosition.y / voxelSize);
+          const vz = Math.round(tempPosition.z / voxelSize);
+
+          const key = `${vx}_${vy}_${vz}`;
+          if (!voxelMap.has(key)) {
+            voxelMap.set(key, [vx * voxelSize, vy * voxelSize, vz * voxelSize]);
+          }
+        }
+
+        const boxGeometry = new RoundedBoxGeometry(
+          voxelSize, voxelSize, voxelSize,
+          segments,
+          voxelSize * cornerRadius
+        );
+
+        const boxMaterial = new THREE.MeshStandardMaterial({
+          color,
+          roughness: CONFIG.voxelRoughness,
+          metalness: CONFIG.voxelMetalness,
+        });
+
+        const instancedMesh = new THREE.InstancedMesh(
+          boxGeometry, boxMaterial, voxelMap.size
+        );
+
+        const dummy = new THREE.Object3D();
+        let i = 0;
+        voxelMap.forEach(([x, y, z]) => {
+          dummy.position.set(x, y, z);
+          dummy.updateMatrix();
+          instancedMesh.setMatrixAt(i, dummy.matrix);
+          i++;
+        });
+
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        return instancedMesh;
+      }
+
+      function setActiveStyle(styleName) {
+        if (!pointsWireGroup || !voxelGroup) return;
+
+        pointsWireGroup.visible = styleName === 'capture';
+        voxelGroup.visible = styleName === 'create';
+        // 'code'-stil kommer senere
+      }
+
+      document.querySelector('.card1').addEventListener('click', () => setActiveStyle('capture'));
+      document.querySelector('.card2').addEventListener('click', () => setActiveStyle('create'));
+      document.querySelector('.card3').addEventListener('click', () => {
+        // legges til senere
+      });
 
       const loader = new GLTFLoader();
 
@@ -179,6 +274,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
         group = new THREE.Group();
 
+        // ---- capture-stil: punkter + wireframe ----
+        pointsWireGroup = new THREE.Group();
+
         const points = new THREE.Points(
           geometry,
           new THREE.PointsMaterial({
@@ -197,8 +295,24 @@ window.addEventListener("DOMContentLoaded", () => {
           })
         );
 
-        group.add(points);
-        group.add(wire);
+        pointsWireGroup.add(points);
+        pointsWireGroup.add(wire);
+
+        // ---- create-stil: solid voxel-kuber med avrundede kanter ----
+        voxelGroup = new THREE.Group();
+        const voxelMesh = buildVoxelMesh(
+          mesh,
+          radius * CONFIG.voxelSize,
+          CONFIG.voxelColor,
+          CONFIG.voxelSampleCount,
+          CONFIG.voxelCornerRadius,
+          CONFIG.voxelSegments
+        );
+        voxelGroup.add(voxelMesh);
+        voxelGroup.visible = false; // skjult som standard
+
+        group.add(pointsWireGroup);
+        group.add(voxelGroup);
 
         group.position.set(
           CONFIG.modelOffsetX,
