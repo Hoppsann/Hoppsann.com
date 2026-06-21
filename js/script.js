@@ -57,10 +57,22 @@ let group;
 let mouseX = 0;
 let mouseY = 0;
 
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
 window.addEventListener('mousemove', (event) => {
   mouseX = (event.clientX / window.innerWidth) * 2 - 1;
   mouseY = (event.clientY / window.innerHeight) * 2 - 1;
 });
+
+// touch fallback: drag rotates face like mouse would
+if (isTouchDevice) {
+  window.addEventListener('touchmove', (event) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+    mouseX = (touch.clientX / window.innerWidth) * 2 - 1;
+    mouseY = (touch.clientY / window.innerHeight) * 2 - 1;
+  }, { passive: true });
+}
 
 const loader = new GLTFLoader();
 loader.load(
@@ -131,10 +143,16 @@ function animate() {
 }
 animate();
 
-window.addEventListener('resize', () => {
+function resizeFace() {
   camera.aspect = container.clientWidth / container.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(container.clientWidth, container.clientHeight);
+}
+
+window.addEventListener('resize', resizeFace);
+window.addEventListener('orientationchange', () => {
+  // dimensions lag right after rotate, wait a tick
+  setTimeout(resizeFace, 100);
 });
 
 
@@ -156,35 +174,38 @@ function distanceToRect(px, py, rect) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-document.addEventListener("mousemove", (event) => {
-    cards.forEach(card => {
-        const glare = card.querySelector(".glare");
-        const cardRec = card.getBoundingClientRect();
+// tilt/glare needs hover, touch devices don't have it - skip to avoid stuck/buggy state
+if (!isTouchDevice) {
+    document.addEventListener("mousemove", (event) => {
+        cards.forEach(card => {
+            const glare = card.querySelector(".glare");
+            const cardRec = card.getBoundingClientRect();
 
-        const halfWidth = cardRec.width / 2;
-        const halfHeight = cardRec.height / 2;
+            const halfWidth = cardRec.width / 2;
+            const halfHeight = cardRec.height / 2;
 
-        const cardCenterX = cardRec.left + halfWidth;
-        const cardCenterY = cardRec.top + halfHeight;
+            const cardCenterX = cardRec.left + halfWidth;
+            const cardCenterY = cardRec.top + halfHeight;
 
-        const deltaX = event.clientX - cardCenterX;
-        const deltaY = event.clientY - cardCenterY;
+            const deltaX = event.clientX - cardCenterX;
+            const deltaY = event.clientY - cardCenterY;
 
-        const rx = clamp(deltaY / halfHeight, -1, 1);
-        const ry = clamp(deltaX / halfWidth, -1, 1);
+            const rx = clamp(deltaY / halfHeight, -1, 1);
+            const ry = clamp(deltaX / halfWidth, -1, 1);
 
-        const distanceToTheCenter = Math.sqrt(deltaX ** 2 + deltaY ** 2);
-        const maxDistance = Math.max(halfWidth, halfHeight);
-        const normalizedDist = clamp(distanceToTheCenter / maxDistance, 0, 1);
+            const distanceToTheCenter = Math.sqrt(deltaX ** 2 + deltaY ** 2);
+            const maxDistance = Math.max(halfWidth, halfHeight);
+            const normalizedDist = clamp(distanceToTheCenter / maxDistance, 0, 1);
 
-        const distOutside = distanceToRect(event.clientX, event.clientY, cardRec);
-        const intensity = 1 - clamp(distOutside / outsideThreshold, 0, 1);
+            const distOutside = distanceToRect(event.clientX, event.clientY, cardRec);
+            const intensity = 1 - clamp(distOutside / outsideThreshold, 0, 1);
 
-        const degree = normalizedDist * maxTiltDegree * intensity;
+            const degree = normalizedDist * maxTiltDegree * intensity;
 
-        card.style.transform = `perspective(400px) rotate3d(${-rx}, ${ry}, 0, ${degree}deg)`;
+            card.style.transform = `perspective(400px) rotate3d(${-rx}, ${ry}, 0, ${degree}deg)`;
 
-        glare.style.transform = `translate(${-ry * 100}%, ${-rx * 100}%) scale(5)`;
-        glare.style.opacity = normalizedDist * maxGlareOpacity * intensity;
+            glare.style.transform = `translate(${-ry * 100}%, ${-rx * 100}%) scale(5)`;
+            glare.style.opacity = normalizedDist * maxGlareOpacity * intensity;
+        });
     });
-});
+}

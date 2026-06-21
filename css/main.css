@@ -21,7 +21,7 @@ body {
 
 #heroInfo {
     background-color: var(--backgroundcolor);
-    width: 200rem;
+    width: 100%;
     padding: 2rem;
     border-radius: 3rem;
 }
@@ -29,10 +29,11 @@ body {
 /* hero face */
 
 #heroFace {
-    width: 250%;
+    width: 100%;
     overflow: hidden;
     position: relative;
     border-radius: 1rem;
+    flex-shrink: 0;
 }
 
 #face {
@@ -47,6 +48,7 @@ body {
     margin-top: 4rem;
     background-color: var(--debugbackgroundcolor);
     display: flex;
+    flex-wrap: wrap;
     gap: 2rem;
     justify-content: center;
 }
@@ -54,6 +56,7 @@ body {
 .cards > div {
     background: var(--cardColor);
     width: 28rem;
+    max-width: 100%;
     height: 35rem;
     border-radius: 3rem;
     padding: 2rem;
@@ -87,4 +90,44 @@ body {
 
 .card3 {
     margin-top: 4rem;
+}
+
+/* mobile */
+@media (max-width: 768px) {
+    body {
+        margin: 1rem;
+    }
+
+    .hero {
+        flex-direction: column;
+        height: auto;
+        gap: 2rem;
+    }
+
+    #heroFace {
+        height: 20rem;
+    }
+
+    #heroInfo {
+        padding: 1.5rem;
+        border-radius: 2rem;
+    }
+
+    #heroInfo h1 {
+        font-size: 1.8rem;
+    }
+
+    .cards {
+        margin-top: 2rem;
+    }
+
+    .cards > div {
+        width: 100%;
+        height: 28rem;
+    }
+
+    .card2,
+    .card3 {
+        margin-top: 0;
+    }
 }
