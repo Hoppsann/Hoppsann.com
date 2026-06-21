@@ -1,5 +1,13 @@
 window.addEventListener("DOMContentLoaded", () => {
 
+  const TARGET_FRAME_MS = 1000 / 60;
+  const ANIMATION_SPEED = 2;
+
+  function getFrameFactor(timestamp, lastTimestamp) {
+    if (!lastTimestamp) return 1;
+    return Math.min((timestamp - lastTimestamp) / TARGET_FRAME_MS, 3) * ANIMATION_SPEED;
+  }
+
   // =========================
   // CURSOR (spring + click)
   // =========================
@@ -36,6 +44,7 @@ window.addEventListener("DOMContentLoaded", () => {
   let isDown = false;
   let clickScale = 1;
   let clickV = 0;
+  let lastCursorTimestamp = 0;
 
   window.addEventListener("mousemove", (e) => {
     mouseX = e.clientX;
@@ -45,19 +54,22 @@ window.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("mousedown", () => isDown = true);
   window.addEventListener("mouseup", () => isDown = false);
 
-  function animateCursor() {
+  function animateCursor(timestamp) {
+    const frameFactor = getFrameFactor(timestamp, lastCursorTimestamp);
+    lastCursorTimestamp = timestamp;
 
     let dx = mouseX - cx;
     let dy = mouseY - cy;
 
-    cvx += dx * CURSOR_CONFIG.stiffness;
-    cvy += dy * CURSOR_CONFIG.stiffness;
+    cvx += dx * CURSOR_CONFIG.stiffness * frameFactor;
+    cvy += dy * CURSOR_CONFIG.stiffness * frameFactor;
 
-    cvx *= CURSOR_CONFIG.friction;
-    cvy *= CURSOR_CONFIG.friction;
+    const cursorFriction = Math.pow(CURSOR_CONFIG.friction, frameFactor);
+    cvx *= cursorFriction;
+    cvy *= cursorFriction;
 
-    cx += cvx;
-    cy += cvy;
+    cx += cvx * frameFactor;
+    cy += cvy * frameFactor;
 
     let speed = Math.sqrt(cvx * cvx + cvy * cvy);
 
@@ -69,9 +81,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const targetClick = isDown ? CURSOR_CONFIG.clickScale : 1;
 
-    clickV += (targetClick - clickScale) * CURSOR_CONFIG.clickSpring;
-    clickV *= CURSOR_CONFIG.clickDamping;
-    clickScale += clickV;
+    clickV += (targetClick - clickScale) * CURSOR_CONFIG.clickSpring * frameFactor;
+    clickV *= Math.pow(CURSOR_CONFIG.clickDamping, frameFactor);
+    clickScale += clickV * frameFactor;
 
     const sx = moveStretch * clickScale;
     const sy = (1 / moveStretch) * clickScale;
@@ -91,7 +103,7 @@ window.addEventListener("DOMContentLoaded", () => {
     requestAnimationFrame(animateCursor);
   }
 
-  animateCursor();
+  requestAnimationFrame(animateCursor);
 
 
   // =========================
@@ -166,8 +178,8 @@ window.addEventListener("DOMContentLoaded", () => {
         asciiCharacters: ' .,:;i!lI1?][}{|/\\tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
         asciiColor: '#c8ffd8',
         asciiBackground: 'transparent',
-        asciiResolution: 0.105,
-        asciiOffsetX: '-4.5%',
+        asciiResolution: 0.15,
+        asciiOffsetX: '-2.35%',
         asciiScaleX: 0.94,
 
         ambientLightColor: 0xffffff,
@@ -250,6 +262,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
       let rotVX = 0;
       let rotVY = 0;
+      let lastFaceTimestamp = 0;
 
       function buildVoxelMesh(mesh, voxelSize, color, sampleCount, cornerRadius, segments) {
         const sampler = new MeshSurfaceSampler(mesh).build();
@@ -454,7 +467,10 @@ window.addEventListener("DOMContentLoaded", () => {
         setActiveStyle(activeFaceStyle);
       });
 
-      function animateFace() {
+      function animateFace(timestamp) {
+        const frameFactor = getFrameFactor(timestamp, lastFaceTimestamp);
+        lastFaceTimestamp = timestamp;
+
         requestAnimationFrame(animateFace);
 
         const sx = window.springX || 0;
@@ -472,14 +488,15 @@ window.addEventListener("DOMContentLoaded", () => {
           const targetY = CONFIG.baseRotationY + mx * CONFIG.mouseRotationStrength;
           const targetX = CONFIG.baseRotationX + my * CONFIG.mouseRotationStrength;
 
-          rotVX += (targetY - group.rotation.y) * CONFIG.rotationSpring;
-          rotVY += (targetX - group.rotation.x) * CONFIG.rotationSpring;
+          rotVX += (targetY - group.rotation.y) * CONFIG.rotationSpring * frameFactor;
+          rotVY += (targetX - group.rotation.x) * CONFIG.rotationSpring * frameFactor;
 
-          rotVX *= CONFIG.rotationDamping;
-          rotVY *= CONFIG.rotationDamping;
+          const rotationDamping = Math.pow(CONFIG.rotationDamping, frameFactor);
+          rotVX *= rotationDamping;
+          rotVY *= rotationDamping;
 
-          group.rotation.y += rotVX;
-          group.rotation.x += rotVY;
+          group.rotation.y += rotVX * frameFactor;
+          group.rotation.x += rotVY * frameFactor;
         }
 
         if (activeFaceStyle === 'code') {
@@ -500,7 +517,7 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       }
 
-      animateFace();
+      requestAnimationFrame(animateFace);
 
       window.addEventListener('resize', () => {
         camera.aspect = container.clientWidth / container.clientHeight;
