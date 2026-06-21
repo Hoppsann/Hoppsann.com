@@ -1,16 +1,22 @@
 window.addEventListener("DOMContentLoaded", () => {
 
   // =========================
-  // CURSOR (spring physics)
+  // CURSOR (spring + click)
   // =========================
 
   const cursor = document.getElementById("cursor");
 
   const CURSOR_CONFIG = {
-    size: 20,
-    stiffness: 0.12,
-    friction: 0.78,
-    stretch: 0.12
+    size: 30,
+
+    stiffness: 0.1,
+    friction: 0.8,
+
+    stretch: 0.03,
+
+    clickScale: 0.75,
+    clickSpring: 0.1,
+    clickDamping: 0.8
   };
 
   cursor.style.width = `${CURSOR_CONFIG.size}px`;
@@ -27,29 +33,31 @@ window.addEventListener("DOMContentLoaded", () => {
 
   let angle = 0;
 
+  let isDown = false;
+  let clickScale = 1;
+  let clickV = 0;
+
   window.addEventListener("mousemove", (e) => {
     mouseX = e.clientX;
     mouseY = e.clientY;
   });
 
-  let lastCursorTime = performance.now();
+  window.addEventListener("mousedown", () => isDown = true);
+  window.addEventListener("mouseup", () => isDown = false);
 
   function animateCursor() {
-    const now = performance.now();
-    const dt = (now - lastCursorTime) / 16.666;
-    lastCursorTime = now;
 
     let dx = mouseX - cx;
     let dy = mouseY - cy;
 
-    cvx += dx * CURSOR_CONFIG.stiffness * dt;
-    cvy += dy * CURSOR_CONFIG.stiffness * dt;
+    cvx += dx * CURSOR_CONFIG.stiffness;
+    cvy += dy * CURSOR_CONFIG.stiffness;
 
-    cvx *= Math.pow(CURSOR_CONFIG.friction, dt);
-    cvy *= Math.pow(CURSOR_CONFIG.friction, dt);
+    cvx *= CURSOR_CONFIG.friction;
+    cvy *= CURSOR_CONFIG.friction;
 
-    cx += cvx * dt;
-    cy += cvy * dt;
+    cx += cvx;
+    cy += cvy;
 
     let speed = Math.sqrt(cvx * cvx + cvy * cvy);
 
@@ -57,7 +65,18 @@ window.addEventListener("DOMContentLoaded", () => {
       angle = Math.atan2(cvy, cvx) * 180 / Math.PI;
     }
 
-    let stretch = 1 + speed * CURSOR_CONFIG.stretch;
+    // movement stretch
+    let moveStretch = 1 + speed * CURSOR_CONFIG.stretch;
+
+    // click spring
+    const targetClick = isDown ? CURSOR_CONFIG.clickScale : 1;
+
+    clickV += (targetClick - clickScale) * CURSOR_CONFIG.clickSpring;
+    clickV *= CURSOR_CONFIG.clickDamping;
+    clickScale += clickV;
+
+    const sx = moveStretch * clickScale;
+    const sy = (1 / moveStretch) * clickScale;
 
     cursor.style.left = `${cx}px`;
     cursor.style.top = `${cy}px`;
@@ -65,10 +84,9 @@ window.addEventListener("DOMContentLoaded", () => {
     cursor.style.transform = `
       translate(-50%, -50%)
       rotate(${angle}deg)
-      scale(${stretch}, ${1 / stretch})
+      scale(${sx}, ${sy})
     `;
 
-    // expose SPRING CURSOR
     window.springX = cx;
     window.springY = cy;
 
@@ -79,7 +97,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 
   // =========================
-  // THREE FACE (uses spring cursor)
+  // THREE FACE
   // =========================
 
   import("three").then(THREE => {
@@ -104,8 +122,8 @@ window.addEventListener("DOMContentLoaded", () => {
         baseRotationX: 0,
         mouseRotationStrength: 0.3,
 
-        rotationSpring: 0.2,
-        rotationDamping: 0.8,
+        rotationSpring: 0.05,
+        rotationDamping: 0.92,
 
         cameraFovMobile: 40,
         cameraFovDesktop: 25,
@@ -195,16 +213,9 @@ window.addEventListener("DOMContentLoaded", () => {
         camera.position.z = radius * CONFIG.cameraDistanceMultiplier;
       });
 
-      let lastFaceTime = performance.now();
-
       function animateFace() {
         requestAnimationFrame(animateFace);
 
-        const now = performance.now();
-        const dt = (now - lastFaceTime) / 16.666;
-        lastFaceTime = now;
-
-        // spring cursor → face input
         const sx = window.springX || 0;
         const sy = window.springY || 0;
 
@@ -220,17 +231,14 @@ window.addEventListener("DOMContentLoaded", () => {
           const targetY = CONFIG.baseRotationY + mx * CONFIG.mouseRotationStrength;
           const targetX = CONFIG.baseRotationX + my * CONFIG.mouseRotationStrength;
 
-          let dx = targetY - group.rotation.y;
-          let dy = targetX - group.rotation.x;
+          rotVX += (targetY - group.rotation.y) * CONFIG.rotationSpring;
+          rotVY += (targetX - group.rotation.x) * CONFIG.rotationSpring;
 
-          rotVX += dx * CONFIG.rotationSpring * dt;
-          rotVY += dy * CONFIG.rotationSpring * dt;
+          rotVX *= CONFIG.rotationDamping;
+          rotVY *= CONFIG.rotationDamping;
 
-          rotVX *= Math.pow(CONFIG.rotationDamping, dt);
-          rotVY *= Math.pow(CONFIG.rotationDamping, dt);
-
-          group.rotation.y += rotVX * dt;
-          group.rotation.x += rotVY * dt;
+          group.rotation.y += rotVX;
+          group.rotation.x += rotVY;
         }
 
         renderer.render(scene, camera);
@@ -249,7 +257,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
 
   // =========================
-  // CARDS (FOLLOW SPRING CURSOR)
+  // CARDS
   // =========================
 
   const cards = document.querySelectorAll(".cards > div");
@@ -268,13 +276,7 @@ window.addEventListener("DOMContentLoaded", () => {
     return Math.sqrt(dx * dx + dy * dy);
   }
 
-  let lastCardTime = performance.now();
-
   function animateCards() {
-
-    const now = performance.now();
-    const dt = (now - lastCardTime) / 16.666;
-    lastCardTime = now;
 
     const x = window.springX || 0;
     const y = window.springY || 0;
@@ -311,7 +313,7 @@ window.addEventListener("DOMContentLoaded", () => {
         `translate(${-ry * 100}%, ${-rx * 100}%) scale(5)`;
 
       glare.style.opacity =
-        norm * maxTiltDegree * 0.04 * intensity;
+        norm * 0.2 * intensity;
     });
 
     requestAnimationFrame(animateCards);

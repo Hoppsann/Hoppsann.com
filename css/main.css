@@ -11,6 +11,8 @@ body {
     --cardColor: linear-gradient(146deg, rgba(97, 197, 255, 1) 0%, rgba(10, 4, 71, 1) 100%);
 }
 
+/* cursor */
+
 * {
   cursor: none;
 }
@@ -27,9 +29,7 @@ body {
 }
 
 
-
-
-
+/* hero */
 
 .hero {
     width: 100%;
@@ -144,6 +144,14 @@ h2 {
 @media (max-width: 768px) {
     body {
         margin: 1rem;
+    }
+
+    * {
+        cursor: default;
+    }
+
+    #cursor {
+        background: none;
     }
 
     .hero {
