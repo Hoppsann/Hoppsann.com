@@ -2,17 +2,18 @@ body {
     margin: 2rem;
     display: flex;
     flex-direction: column;
+    background-color: rgb(255, 250, 241);
 }
 
 :root {
-    --debugbackgroundcolor: rgba(255, 0, 0, 0.507);
+    --debugbackgroundcolor: rgba(255, 0, 0, 0);
     --backgroundcolor: rgb(211, 211, 211);
     --cardColor: linear-gradient(146deg, rgba(97, 197, 255, 1) 0%, rgba(10, 4, 71, 1) 100%);
 }
 
 .hero {
     width: 100%;
-    height: 30rem;
+    height: 40rem;
     display: flex;
     gap: 4rem;
     background-color: var(--debugbackgroundcolor);
@@ -28,11 +29,10 @@ body {
 /* hero face */
 
 #heroFace {
-    background-color: var(--backgroundcolor);
     width: 250%;
-    border-radius: 999rem;
     overflow: hidden;
     position: relative;
+    border-radius: 1rem;
 }
 
 #face {

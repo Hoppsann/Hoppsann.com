@@ -8,11 +8,11 @@ const CONFIG = {
 
   // punkter
   pointColor: 0x0a0447,
-  pointSize: 0.02,            // multipliseres med modellens radius
+  pointSize: 0.01,            // multipliseres med modellens radius
 
   // wireframe-linjer
   wireframeColor: 0x0a0447,
-  wireframeOpacity: 0.4,
+  wireframeOpacity: 0.3,
 
   // posisjon (offset fra senter, etter at modellen er sentrert)
   modelOffsetX: 0,
@@ -22,11 +22,11 @@ const CONFIG = {
   // rotasjon
   baseRotationY: Math.PI,     // 180° - retningsfiks (peker feil vei uten denne)
   baseRotationX: 0,
-  mouseRotationStrength: 0.3, // radianer - hvor mye den roterer mot musepekeren
-  rotationSmoothing: 0.05,    // 0-1 - lavere = tregere/mykere bevegelse
+  mouseRotationStrength: 0.25, // radianer - hvor mye den roterer mot musepekeren
+  rotationSmoothing: 0.1,    // 0-1 - lavere = tregere/mykere bevegelse
 
   // kamera
-  cameraFov: 50,
+  cameraFov: 25,
   cameraNear: 0.1,
   cameraFar: 100,
   cameraDistanceMultiplier: 2.5, // multipliseres med modellens radius
