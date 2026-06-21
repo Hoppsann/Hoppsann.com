@@ -7,22 +7,22 @@ const CONFIG = {
   modelPath: '/models/face.glb',
 
   // punkter
-  pointColor: 0x0a0447,
-  pointSize: 0.01,            // multipliseres med modellens radius
+  pointColor: 0xc0dceb,
+  pointSize: 0.005,            // multipliseres med modellens radius
 
   // wireframe-linjer
-  wireframeColor: 0x0a0447,
+  wireframeColor: 0xede7d8,
   wireframeOpacity: 0.3,
 
   // posisjon (offset fra senter, etter at modellen er sentrert)
   modelOffsetX: 0,
-  modelOffsetY: 0,
+  modelOffsetY: 0.01,
   modelOffsetZ: 0,
 
   // rotasjon
-  baseRotationY: Math.PI,     // 180° - retningsfiks (peker feil vei uten denne)
+  baseRotationY: Math.PI - 0.1,     // 180° - retningsfiks (peker feil vei uten denne)
   baseRotationX: 0,
-  mouseRotationStrength: 0.25, // radianer - hvor mye den roterer mot musepekeren
+  mouseRotationStrength: 0.3, // radianer - hvor mye den roterer mot musepekeren
   rotationSmoothing: 0.1,    // 0-1 - lavere = tregere/mykere bevegelse
 
   // kamera
@@ -58,8 +58,12 @@ let mouseX = 0;
 let mouseY = 0;
 
 window.addEventListener('mousemove', (event) => {
-  mouseX = (event.clientX / window.innerWidth) * 2 - 1;
-  mouseY = (event.clientY / window.innerHeight) * 2 - 1;
+  const rect = container.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+
+  mouseX = clamp((event.clientX - centerX) / (rect.width / 2), -1, 1);
+  mouseY = clamp((event.clientY - centerY) / (rect.height / 2), -1, 1);
 });
 
 // touch fallback: finger-drag rotates face on phones (no mousemove there)
