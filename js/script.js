@@ -1,219 +1,226 @@
-// ---------- hero face: kontroll-variabler ----------
+window.addEventListener("DOMContentLoaded", () => {
 
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  // =========================
+  // CURSOR (spring + momentum)
+  // =========================
 
-// Define the breakpoint media query
-const mobileMediaQuery = window.matchMedia('(max-width: 768px)');
+  const cursor = document.getElementById("cursor");
 
-const CONFIG = {
-  modelPath: '/models/face.glb',
+  const CURSOR_CONFIG = {
+    size: 20,
+    stiffness: 0.12,
+    friction: 0.78,
+    stretch: 0.12
+  };
 
-  // punkter
-  pointColor: 0xc0dceb,
-  pointSize: 0.005,            // multipliseres med modellens radius
+  cursor.style.width = `${CURSOR_CONFIG.size}px`;
+  cursor.style.height = `${CURSOR_CONFIG.size}px`;
 
-  // wireframe-linjer
-  wireframeColor: 0xede7d8,
-  wireframeOpacity: 0.3,
+  let mouseX = 0;
+  let mouseY = 0;
 
-  // posisjon (offset fra senter, etter at modellen er sentrert)
-  modelOffsetX: 0,
-  modelOffsetY: 0.01,
-  modelOffsetZ: 0,
+  let cx = 0;
+  let cy = 0;
 
-  // rotasjon
-  baseRotationY: Math.PI - 0.1,     // 180° - retningsfiks (peker feil vei uten denne)
-  baseRotationX: 0,
-  mouseRotationStrength: 0.3, // radianer - hvor mye den roterer mot musepekeren
-  rotationSmoothing: 0.1,    // 0-1 - lavere = tregere/mykere bevegelse
+  let cvx = 0;
+  let cvy = 0;
 
-  // kamera
-  cameraFovMobile: 40,        // FOV verdi for telefoner (juster etter behov)
-  cameraFovDesktop: 25,       // FOV verdi for PC
-  cameraNear: 0.1,
-  cameraFar: 100,
-  cameraDistanceMultiplier: 2.5, // multipliseres med modellens radius
-};
+  let cAngle = 0;
 
+  window.addEventListener("mousemove", (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+  });
 
-// ---------- oppsett ----------
+  function animateCursor() {
+    let dx = mouseX - cx;
+    let dy = mouseY - cy;
 
-const canvas = document.querySelector('#face');
-const container = document.querySelector('#heroFace');
+    cvx += dx * CURSOR_CONFIG.stiffness;
+    cvy += dy * CURSOR_CONFIG.stiffness;
 
-const scene = new THREE.Scene();
+    cvx *= CURSOR_CONFIG.friction;
+    cvy *= CURSOR_CONFIG.friction;
 
-// Set initial FOV dynamically based on screen width on load
-const initialFov = mobileMediaQuery.matches ? CONFIG.cameraFovMobile : CONFIG.cameraFovDesktop;
+    cx += cvx;
+    cy += cvy;
 
-const camera = new THREE.PerspectiveCamera(
-  initialFov,
-  container.clientWidth / container.clientHeight,
-  CONFIG.cameraNear,
-  CONFIG.cameraFar
-);
-camera.position.z = 5;
+    let speed = Math.sqrt(cvx * cvx + cvy * cvy);
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-renderer.setSize(container.clientWidth, container.clientHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
-
-let group;
-
-let mouseX = 0;
-let mouseY = 0;
-
-window.addEventListener('mousemove', (event) => {
-  const rect = container.getBoundingClientRect();
-  const centerX = rect.left + rect.width / 2;
-  const centerY = rect.top + rect.height / 2;
-
-  mouseX = clamp((event.clientX - centerX) / (rect.width / 2), -1, 1);
-  mouseY = clamp((event.clientY - centerY) / (rect.height / 2), -1, 1);
-});
-
-// touch fallback: finger-drag rotates face on phones (no mousemove there)
-window.addEventListener('touchmove', (event) => {
-  const touch = event.touches[0];
-  if (!touch) return;
-  mouseX = (touch.clientX / window.innerWidth) * 2 - 1;
-  mouseY = (touch.clientY / window.innerHeight) * 2 - 1;
-}, { passive: true });
-
-const loader = new GLTFLoader();
-loader.load(
-  CONFIG.modelPath,
-  (gltf) => {
-    let mesh = null;
-    gltf.scene.traverse((child) => {
-      if (child.isMesh && !mesh) mesh = child;
-    });
-
-    if (!mesh) {
-      console.error('Fant ingen mesh i GLB-filen');
-      return;
+    if (speed > 0.1) {
+      cAngle = Math.atan2(cvy, cvx) * 180 / Math.PI;
     }
 
-    const geometry = mesh.geometry;
-    geometry.computeBoundingSphere();
-    const { center, radius } = geometry.boundingSphere;
+    let stretch = 1 + speed * CURSOR_CONFIG.stretch;
 
-    geometry.translate(-center.x, -center.y, -center.z);
+    cursor.style.left = `${cx}px`;
+    cursor.style.top = `${cy}px`;
 
-    group = new THREE.Group();
+    cursor.style.transform = `
+      translate(-50%, -50%)
+      rotate(${cAngle}deg)
+      scale(${stretch}, ${1 / stretch})
+    `;
 
-    const points = new THREE.Points(
-      geometry,
-      new THREE.PointsMaterial({
-        size: radius * CONFIG.pointSize,
-        color: CONFIG.pointColor,
-        sizeAttenuation: true,
-      })
-    );
-    group.add(points);
-
-    const wireframeGeometry = new THREE.WireframeGeometry(geometry);
-    const wireframe = new THREE.LineSegments(
-      wireframeGeometry,
-      new THREE.LineBasicMaterial({
-        color: CONFIG.wireframeColor,
-        transparent: true,
-        opacity: CONFIG.wireframeOpacity,
-      })
-    );
-    group.add(wireframe);
-
-    group.position.set(CONFIG.modelOffsetX, CONFIG.modelOffsetY, CONFIG.modelOffsetZ);
-    group.rotation.y = CONFIG.baseRotationY;
-    group.rotation.x = CONFIG.baseRotationX;
-    scene.add(group);
-
-    camera.position.z = radius * CONFIG.cameraDistanceMultiplier;
-  },
-  undefined,
-  (error) => console.error('Feil ved lasting av modell:', error)
-);
-
-function animate() {
-  requestAnimationFrame(animate);
-
-  if (group) {
-    const targetRotationY = CONFIG.baseRotationY + mouseX * CONFIG.mouseRotationStrength;
-    const targetRotationX = CONFIG.baseRotationX + mouseY * CONFIG.mouseRotationStrength;
-
-    group.rotation.y += (targetRotationY - group.rotation.y) * CONFIG.rotationSmoothing;
-    group.rotation.x += (targetRotationX - group.rotation.x) * CONFIG.rotationSmoothing;
+    requestAnimationFrame(animateCursor);
   }
 
-  renderer.render(scene, camera);
-}
-animate();
-
-function resizeFace() {
-  // Update camera FOV based on current window width boundaries
-  camera.fov = mobileMediaQuery.matches ? CONFIG.cameraFovMobile : CONFIG.cameraFovDesktop;
-  
-  // Re-calculate the matrix and boundaries for Three.js
-  camera.aspect = container.clientWidth / container.clientHeight;
-  camera.updateProjectionMatrix();
-  
-  renderer.setSize(container.clientWidth, container.clientHeight);
-}
-
-window.addEventListener('resize', resizeFace);
-window.addEventListener('orientationchange', () => {
-  setTimeout(resizeFace, 100); // dims lag right after rotate
-});
+  animateCursor();
 
 
-// ---------- cards ----------
+  // =========================
+  // THREE FACE (spring + inertia)
+  // =========================
 
-const cards = document.querySelectorAll(".cards > div");
+  import("three").then(THREE => {
+    import("three/addons/loaders/GLTFLoader.js").then(({ GLTFLoader }) => {
 
-const maxTiltDegree = 5;
-const maxGlareOpacity = 0.2;
-const outsideThreshold = 200; // px beyond card edge where effect fully stops
+      const mobileMediaQuery = window.matchMedia('(max-width: 768px)');
 
-function clamp(value, min, max) {
-    return Math.min(Math.max(value, min), max);
-}
+      const CONFIG = {
+        modelPath: '/models/face.glb',
 
-function distanceToRect(px, py, rect) {
-    const dx = Math.max(rect.left - px, 0, px - rect.right);
-    const dy = Math.max(rect.top - py, 0, py - rect.bottom);
-    return Math.sqrt(dx * dx + dy * dy);
-}
+        pointColor: 0xc0dceb,
+        pointSize: 0.005,
 
-document.addEventListener("mousemove", (event) => {
-    cards.forEach(card => {
-        const glare = card.querySelector(".glare");
-        const cardRec = card.getBoundingClientRect();
+        wireframeColor: 0xede7d8,
+        wireframeOpacity: 0.3,
 
-        const halfWidth = cardRec.width / 2;
-        const halfHeight = cardRec.height / 2;
+        modelOffsetX: 0,
+        modelOffsetY: 0.01,
+        modelOffsetZ: 0,
 
-        const cardCenterX = cardRec.left + halfWidth;
-        const cardCenterY = cardRec.top + halfHeight;
+        baseRotationY: Math.PI - 0.1,
+        baseRotationX: 0,
+        mouseRotationStrength: 0.3,
 
-        const deltaX = event.clientX - cardCenterX;
-        const deltaY = event.clientY - cardCenterY;
+        rotationSpring: 0.075,
+        rotationDamping: 0.9,
 
-        const rx = clamp(deltaY / halfHeight, -1, 1);
-        const ry = clamp(deltaX / halfWidth, -1, 1);
+        cameraFovMobile: 40,
+        cameraFovDesktop: 25,
+        cameraNear: 0.1,
+        cameraFar: 100,
+        cameraDistanceMultiplier: 2.5,
+      };
 
-        const distanceToTheCenter = Math.sqrt(deltaX ** 2 + deltaY ** 2);
-        const maxDistance = Math.max(halfWidth, halfHeight);
-        const normalizedDist = clamp(distanceToTheCenter / maxDistance, 0, 1);
+      const canvas = document.querySelector('#face');
+      const container = document.querySelector('#heroFace');
 
-        const distOutside = distanceToRect(event.clientX, event.clientY, cardRec);
-        const intensity = 1 - clamp(distOutside / outsideThreshold, 0, 1);
+      const scene = new THREE.Scene();
 
-        const degree = normalizedDist * maxTiltDegree * intensity;
+      const camera = new THREE.PerspectiveCamera(
+        mobileMediaQuery.matches ? CONFIG.cameraFovMobile : CONFIG.cameraFovDesktop,
+        container.clientWidth / container.clientHeight,
+        CONFIG.cameraNear,
+        CONFIG.cameraFar
+      );
 
-        card.style.transform = `perspective(400px) rotate3d(${-rx}, ${ry}, 0, ${degree}deg)`;
+      const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
 
-        glare.style.transform = `translate(${-ry * 100}%, ${-rx * 100}%) scale(5)`;
-        glare.style.opacity = normalizedDist * maxGlareOpacity * intensity;
+      let group;
+
+      let mx = 0;
+      let my = 0;
+
+      window.addEventListener('mousemove', (event) => {
+        const rect = container.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+
+        mx = (event.clientX - cx) / (rect.width / 2);
+        my = (event.clientY - cy) / (rect.height / 2);
+      });
+
+      let rotVX = 0;
+      let rotVY = 0;
+
+      const loader = new GLTFLoader();
+      loader.load(CONFIG.modelPath, (gltf) => {
+
+        let mesh = null;
+        gltf.scene.traverse(c => {
+          if (c.isMesh && !mesh) mesh = c;
+        });
+
+        const geometry = mesh.geometry;
+        geometry.computeBoundingSphere();
+
+        const { center, radius } = geometry.boundingSphere;
+
+        geometry.translate(-center.x, -center.y, -center.z);
+
+        group = new THREE.Group();
+
+        const points = new THREE.Points(
+          geometry,
+          new THREE.PointsMaterial({
+            size: radius * CONFIG.pointSize,
+            color: CONFIG.pointColor,
+            sizeAttenuation: true,
+          })
+        );
+
+        const wire = new THREE.LineSegments(
+          new THREE.WireframeGeometry(geometry),
+          new THREE.LineBasicMaterial({
+            color: CONFIG.wireframeColor,
+            transparent: true,
+            opacity: CONFIG.wireframeOpacity,
+          })
+        );
+
+        group.add(points);
+        group.add(wire);
+
+        group.position.set(
+          CONFIG.modelOffsetX,
+          CONFIG.modelOffsetY,
+          CONFIG.modelOffsetZ
+        );
+
+        group.rotation.y = CONFIG.baseRotationY;
+
+        scene.add(group);
+
+        camera.position.z = radius * CONFIG.cameraDistanceMultiplier;
+      });
+
+      function animateFace() {
+        requestAnimationFrame(animateFace);
+
+        if (group) {
+
+          const targetY = CONFIG.baseRotationY + mx * CONFIG.mouseRotationStrength;
+          const targetX = CONFIG.baseRotationX + my * CONFIG.mouseRotationStrength;
+
+          let dx = targetY - group.rotation.y;
+          let dy = targetX - group.rotation.x;
+
+          rotVX += dx * CONFIG.rotationSpring;
+          rotVY += dy * CONFIG.rotationSpring;
+
+          rotVX *= CONFIG.rotationDamping;
+          rotVY *= CONFIG.rotationDamping;
+
+          group.rotation.y += rotVX;
+          group.rotation.x += rotVY;
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      animateFace();
+
+      window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+      });
+
     });
+  });
+
 });

@@ -11,9 +11,29 @@ body {
     --cardColor: linear-gradient(146deg, rgba(97, 197, 255, 1) 0%, rgba(10, 4, 71, 1) 100%);
 }
 
+* {
+  cursor: none;
+}
+
+#cursor {
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  background: white;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  mix-blend-mode: difference;
+}
+
+
+
+
+
+
 .hero {
     width: 100%;
-    height: 40rem;
+    height: 38rem;
     display: flex;
     gap: 4rem;
     background-color: var(--debugbackgroundcolor);
@@ -60,7 +80,7 @@ h1 {
     text-align: center;
     font-size: 7vw;
     margin: 0;
-    margin-bottom: 2rem;
+    margin-bottom: 5rem;
     font-family: geom;
 }
 
@@ -83,7 +103,7 @@ h2 {
 
 .cards > div {
     background: var(--cardColor);
-    width: 28rem;
+    width: 20rem;
     max-width: 100%;
     height: 35rem;
     border-radius: 3rem;
