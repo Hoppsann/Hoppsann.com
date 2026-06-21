@@ -550,6 +550,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const cards = document.querySelectorAll(".cards > div");
 
+  const maxColorDistance = 200;
+
   const maxTiltDegree = 5;
   const maxGlareOpacity = 0.2;
   const outsideThreshold = 200;
@@ -591,6 +593,18 @@ window.addEventListener("DOMContentLoaded", () => {
 
       const outside = distanceToRect(x, y, rect);
       const intensity = 1 - clamp(outside / outsideThreshold, 0, 1);
+
+      const colorAmount = 1 - clamp(outside / maxColorDistance, 0, 1);
+
+        if (
+        !document.body.classList.contains("theme-capture") &&
+        !document.body.classList.contains("theme-create") &&
+        !document.body.classList.contains("theme-code")
+        ) {
+        card.style.filter = `grayscale(${1 - colorAmount})`;
+        } else {
+        card.style.filter = "grayscale(0)";
+        }
 
       const degree = norm * maxTiltDegree * intensity;
 
