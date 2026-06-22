@@ -11,11 +11,11 @@ body {
     --debugbackgroundcolor: rgba(255, 0, 0, 0);
     --backgroundcolor: rgb(255, 255, 255);
     --cardColor: linear-gradient(146deg, rgba(97, 197, 255, 1) 0%, rgba(10, 4, 71, 1) 100%);
-    /* Customizable sawtooth color: set this to pick a specific color
-       instead of using the automatic desaturated theme color. Example:
-       body { --sawtooth-color: #123456; } or body.theme-capture { --sawtooth-color: #ffeedd; }
-    */
+
     --sawtooth-color: var(--backgroundcolor);
+    --intro-color: black;
+    --backgroundcolor: #ffffff;
+    --theme-body-color: var(--backgroundcolor);
 }
 
 /* cursor */
@@ -77,8 +77,6 @@ body.theme-code .intro {
   background-color: #001a0d;
 }
 
-/* Provide a desaturated background color for the page and sawtooth.
-    Uses HSL fallbacks; manually override per theme with --theme-body-color and --sawtooth-color. */
 body.theme-capture {
     --backgroundcolor: #d9f1ff
 }
@@ -89,9 +87,6 @@ body.theme-code {
     --backgroundcolor: #9cc789
 }
 
-/* Default per-theme body + sawtooth variables. You can manually override these
-   per theme by setting --theme-body-color and --sawtooth-color (hex, hsl, etc.).
-   Example: body.theme-capture { --theme-body-color: #102030; --sawtooth-color: #08121a; } */
 body.theme-capture {
     --theme-body-color: var(--backgroundcolor);
     --sawtooth-color: var(--backgroundcolor);
@@ -105,6 +100,21 @@ body.theme-create {
 body.theme-code {
     --theme-body-color: var(--backgroundcolor);
     --sawtooth-color: var(--backgroundcolor);
+}
+
+body.theme-capture {
+    --backgroundcolor: #d9f1ff;
+    --intro-color: #1c8eff;
+}
+
+body.theme-create {
+    --backgroundcolor: #ffd9e1;
+    --intro-color: #f02247;
+}
+
+body.theme-code {
+    --backgroundcolor: #9cc789;
+    --intro-color: #001a0d;
 }
 
 /* grayscale cards outside active themes */
@@ -157,9 +167,13 @@ body.theme-code {
 
 @media (max-width: 768px) {
     .intro::after {
-        --tooth-height: 4rem;
+        --tooth-height: 2.5rem;
         clip-path: polygon(
-            0 40%, 12.5% 0%, 25% 40%, 37.5% 0%, 50% 40%, 62.5% 0%, 75% 40%, 87.5% 0%, 100% 40%,
+            0 35%, 
+            6.25% 0%, 12.5% 35%, 18.75% 0%, 25% 35%, 
+            31.25% 0%, 37.5% 35%, 43.75% 0%, 50% 35%, 
+            56.25% 0%, 62.5% 35%, 68.75% 0%, 75% 35%, 
+            81.25% 0%, 87.5% 35%, 93.75% 0%, 100% 35%,
             100% 100%, 0% 100%
         );
     }
@@ -306,6 +320,76 @@ h2 {
     margin-top: 4rem;
 }
 
+
+/* footer */
+
+footer {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    margin-top: 6rem;
+    height: 30rem;
+    background: var(--intro-color);
+    --footer-tooth-height: 6rem;
+}
+
+footer::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -1px;
+    height: var(--footer-tooth-height);
+    background: var(--theme-body-color, var(--backgroundcolor));
+    clip-path: polygon(
+        0 70%,
+        4.1667% 100%, 8.3333% 70%, 12.5% 100%, 16.6667% 70%, 20.8333% 100%,
+        25% 70%, 29.1667% 100%, 33.3333% 70%, 37.5% 100%, 41.6667% 70%, 45.8333% 100%,
+        50% 70%, 54.1667% 100%, 58.3333% 70%, 62.5% 100%, 66.6667% 70%, 70.8333% 100%,
+        75% 70%, 79.1667% 100%, 83.3333% 70%, 87.5% 100%, 91.6667% 70%, 95.8333% 100%,
+        100% 70%,
+        100% 0%, 0% 0%
+    );
+}
+
+@media (max-width: 768px) {
+    footer {
+        --footer-tooth-height: 2.5rem;
+    }
+
+    footer::before {
+        clip-path: polygon(
+            0 65%,
+            6.25% 100%, 12.5% 65%, 18.75% 100%, 25% 65%,
+            31.25% 100%, 37.5% 65%, 43.75% 100%, 50% 65%,
+            56.25% 100%, 62.5% 65%, 68.75% 100%, 75% 65%,
+            81.25% 100%, 87.5% 65%, 93.75% 100%, 100% 65%,
+            100% 0%, 0% 0%
+        );
+    }
+}
+
+footer h1 {
+    margin-top: 7rem;
+    font-size: 7vw;
+}
+
+footer a {
+    align-self: center;
+    color: white;
+    mix-blend-mode: difference;
+    font-size: 5vw;
+    margin-top: 1rem;
+    text-decoration: none;
+    font-family: geom;
+    transition: 0.25s;
+}
+
+footer a:hover {
+    transform: scale(1.1);
+}
+
+
 /* mobile */
 @media (max-width: 768px) {
     body {
@@ -362,5 +446,13 @@ h2 {
     .card2,
     .card3 {
         margin-top: 0;
+    }
+
+    footer h1 {
+        font-size: 10vw;
+    }
+
+    footer a {
+        font-size: 7vw;
     }
 }

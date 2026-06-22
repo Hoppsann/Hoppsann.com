@@ -624,3 +624,44 @@ window.addEventListener("DOMContentLoaded", () => {
   animateCards();
 
 });
+
+
+// footer
+
+const contactElement = document.getElementById("contact");
+
+// --- Your Configuration Variables ---
+const smallestSize = 1.0;     // The default scale (e.g., 1 = 100%)
+const biggestSize = 1.1;      // The maximum scale when cursor is on/inside the element
+const effectDistance = 250;   // Distance in pixels from the edge where the scaling begins
+
+document.addEventListener("mousemove", (e) => {
+  // Get the current position and dimensions of the element
+  const rect = contactElement.getBoundingClientRect();
+  
+  const mouseX = e.clientX;
+  const mouseY = e.clientY;
+
+  // Calculate distance from mouse to the bounding box (edges) of the element.
+  // If the mouse is inside the element, both dx and dy evaluate to 0.
+  const dx = Math.max(0, rect.left - mouseX, mouseX - rect.right);
+  const dy = Math.max(0, rect.top - mouseY, mouseY - rect.bottom);
+  
+  // Pythagorean theorem to get the actual straight-line distance
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  // Calculate the new scale
+  let newScale = smallestSize;
+
+  if (distance < effectDistance) {
+    // Calculate how close the mouse is as a percentage (0 to 1)
+    // 1 = touching/inside the element, 0 = at the outer edge of the effectDistance
+    const progress = 1 - (distance / effectDistance);
+    
+    // Map the progress to the scale range
+    newScale = smallestSize + ((biggestSize - smallestSize) * progress);
+  }
+
+  // Apply the scale to the element
+  contactElement.style.transform = `scale(${newScale})`;
+});
