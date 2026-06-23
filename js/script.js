@@ -198,7 +198,7 @@ window.addEventListener("DOMContentLoaded", () => {
         rotationSpring: 0.05,
         rotationDamping: 0.92,
 
-        cameraFovMobile: 50,
+        cameraFovMobile: 65,
         cameraFovDesktop: 45,
         cameraNear: 0.1,
         cameraFar: 100,

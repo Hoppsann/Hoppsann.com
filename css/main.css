@@ -327,7 +327,7 @@ footer {
     display: flex;
     flex-direction: column;
     position: relative;
-    margin-top: 6rem;
+    margin-top: 2rem;
     height: 30rem;
     background: var(--intro-color);
     --footer-tooth-height: 6rem;
@@ -427,6 +427,11 @@ footer a:hover {
         font-size: 1.8rem;
     }
 
+    .intro {
+        padding-bottom: 6rem;
+        padding-top: 0rem;
+    }
+
     h2 {
         font-size: 1rem;
     }
@@ -446,6 +451,11 @@ footer a:hover {
     .card2,
     .card3 {
         margin-top: 0;
+    }
+
+    footer {
+        margin-top: 1rem;
+        height: 20rem;
     }
 
     footer h1 {
