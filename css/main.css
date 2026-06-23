@@ -404,10 +404,10 @@ footer a:hover {
     }
 
     :root {
-        --theme-shadow-config: drop-shadow(0px 0px 15px rgb(117, 194, 230));
+        --theme-shadow-config: drop-shadow(0px 0px 10px rgb(117, 194, 230));
     }
     body.theme-create, body.theme-capture {--theme-shadow-config: drop-shadow(0px 0px 8px rgba(0, 0, 0, 0.5));}
-    body.theme-code {--theme-shadow-config: drop-shadow(0px 0px 10px rgb(26, 163, 145));}
+    body.theme-code {--theme-shadow-config: drop-shadow(0px 0px 7px rgb(26, 163, 145));}
 
     
     .intro-sawtooth-shape {
