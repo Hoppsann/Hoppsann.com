@@ -299,7 +299,8 @@ footer {
     flex-direction: column;
     position: relative;
     margin-top: 2rem;
-    height: 30rem;
+    height: fit-content;
+    padding-bottom: 5rem;
     background: var(--intro-color);
     --footer-tooth-height: 6rem;
 }
@@ -337,8 +338,37 @@ footer {
 }
 
 
+
+
+
+footer .footer-links {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 1rem 1.5rem;
+    padding: 0;
+    margin: 10rem 1.5rem 0;
+    position: relative;
+    z-index: 3;
+}
+
+footer .footer-links li {
+    display: inline-flex;
+}
+
+footer .footer-links a {
+    color: white;
+    mix-blend-mode: difference;
+    font-size: clamp(1rem, 2.2vw, 1.5rem);
+    text-decoration: none;
+    font-family: geom;
+    transition: 0.25s;
+    margin: 0;
+}
+
 footer h1 {
-    margin-top: 7rem;
+    margin-top: 2rem;
     font-size: 7vw;
 }
 
@@ -457,6 +487,10 @@ footer a:hover {
             81.25% 100%, 87.5% 65%, 93.75% 100%, 100% 65%,
             100% 0%, 0% 0%
         );
+    }
+
+    footer .footer-links {
+        margin-top: 5rem;
     }
 
     footer h1 {
