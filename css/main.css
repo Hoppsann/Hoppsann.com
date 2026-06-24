@@ -21,6 +21,17 @@ body {
     --H1zIndexTheme: 9999;
 }
 
+.intro p {
+    position: absolute;
+    top: 0;
+    left: 3rem;
+    color: white;
+    mix-blend-mode: difference;
+    font-family: geom;
+    font-size: 2rem;
+}
+
+
 /* cursor */
 
 * {
@@ -398,6 +409,11 @@ footer a:hover {
 
     * {
         cursor: default;
+    }
+
+    .intro p {
+        top: 1rem;
+        font-size: 1rem;
     }
 
     #cursor {
