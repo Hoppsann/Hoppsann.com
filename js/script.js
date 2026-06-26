@@ -30,11 +30,11 @@ window.addEventListener("DOMContentLoaded", () => {
   cursor.style.width = `${CURSOR_CONFIG.size}px`;
   cursor.style.height = `${CURSOR_CONFIG.size}px`;
 
-  let mouseX = 0;
-  let mouseY = 0;
+ let mouseX = window.innerWidth / 2;
+let mouseY = window.innerHeight / 2;
 
-  let cx = 0;
-  let cy = 0;
+let cx = window.innerWidth / 2;
+let cy = window.innerHeight / 2;
 
   let cvx = 0;
   let cvy = 0;
