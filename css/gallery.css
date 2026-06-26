@@ -20,12 +20,14 @@
 
 .gallery-inner {
   overflow: hidden;
+  width: 90vw;
+  margin: 0 auto;
 }
 
-/* ---- masonry grid ---- */
+/* ---- masonry grid — columns auto-fit to screen width ---- */
 
 .gallery-grid {
-  column-count: 4;
+  column-width: 300px;
   column-gap: 6px;
   padding: 2rem 6px 4rem;
 }
@@ -163,13 +165,10 @@
    ========================================= */
 
 @media (max-width: 768px) {
-  .gallery-grid {
-    column-count: 2;
-    column-gap: 4px;
-    padding: 1rem 4px 3rem;
-  }
   .gallery-item { cursor: default; }
   .lightbox-icon-btn { cursor: default; }
   .lightbox-prev { left: 0.4rem; }
   .lightbox-next { right: 0.4rem; }
+  .gallery-grid {column-width: 150px;}
+  .gallery-inner {width: 95vw;}
 }
