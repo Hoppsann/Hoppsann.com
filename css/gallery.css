@@ -7,6 +7,7 @@
 /* ---- expanding section ---- */
 
 .gallery-section {
+    margin-top: 5rem;
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.45s ease;

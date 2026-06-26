@@ -100,8 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // card1 toggles gallery; card2/3 close it
   document.querySelector('.card1')?.addEventListener('click', () => {
-    const section = document.getElementById('gallery-section');
-    section.classList.contains('is-open') ? closeGallery() : openGallery();
+    openGallery();
   });
   document.querySelector('.card2')?.addEventListener('click', closeGallery);
   document.querySelector('.card3')?.addEventListener('click', closeGallery);
