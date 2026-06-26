@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Heisann og Hoppsann!</title>
     <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/gallery.css">
     <link rel="icon" type="image/x-icon" href="/img/favicon.png">
 
     <script type="importmap">
@@ -16,31 +17,24 @@
     }
     </script>
     <script type="module" src="./js/script.js"></script>
+    <script src="/js/gallery.js" defer></script>
 </head>
 <body>
 
     <div id="cursor"></div>
 
-    
     <section class="intro">
         <p title="my portfolio is currently work in progress!!!!!!">(WIP)</p>
         <div class="hero">
             <div id="heroFace">
                 <canvas id="face"></canvas>
             </div>
-            <!-- <div id="heroInfo">
-                <img src="./img/logo.png" draggable="false" alt="">
-                <p>Lorem ipsum dolor sit amet consectetur adipisicing elit. Nemo blanditiis tempora ab, quia ut ea reiciendis autem eos
-                    eaque. Similique commodi illo nobis eaque provident hic dolore praesentium et quidem rem eos maxime omnis, labore
-                    nam ducimus iure vero laborum aut quisquam necessitatibus quibusdam expedita facere excepturi? Aperiam, atque quae.
-                </p>
-            </div> -->
         </div>
 
         <h1>
             Heisann og Hoppsann
         </h1>
-            <div class="intro-sawtooth-wrapper">
+        <div class="intro-sawtooth-wrapper">
             <div class="intro-sawtooth-shape"></div>
         </div>
     </section>
@@ -49,8 +43,7 @@
         <div class="card1" id="card">
             <div class="glare"></div>
             <div class="card-content">
-                <!-- capture -->
-                 <img src="/img/capture-card.png" alt="">
+                <img src="/img/capture-card.png" alt="">
             </div>
         </div>
 
@@ -64,10 +57,25 @@
         <div class="card3" id="card">
             <div class="glare"></div>
             <div class="card-content">
-                <!-- code -->
-                 <img src="img/code-card.png" alt="">
+                <img src="img/code-card.png" alt="">
             </div>
         </div>
+    </div>
+
+    <div id="gallery-section" class="gallery-section">
+        <div class="gallery-inner">
+            <div id="gallery-grid" class="gallery-grid"></div>
+        </div>
+    </div>
+
+    <div id="lightbox" class="lightbox">
+        <button class="lightbox-icon-btn lightbox-close-btn" id="lightbox-close">×</button>
+        <button class="lightbox-icon-btn lightbox-nav-btn lightbox-prev" id="lightbox-prev">‹</button>
+        <div id="lightbox-img-wrap" class="lightbox-img-wrap">
+            <img id="lightbox-img" src="" alt="">
+        </div>
+        <button class="lightbox-icon-btn lightbox-nav-btn lightbox-next" id="lightbox-next">›</button>
+        <div id="lightbox-counter" class="lightbox-counter"></div>
     </div>
 
     <footer>

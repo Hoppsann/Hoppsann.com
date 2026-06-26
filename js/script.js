@@ -665,3 +665,19 @@ document.addEventListener("mousemove", (e) => {
   // Apply the scale to the element
   contactElement.style.transform = `scale(${newScale})`;
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// gallery
