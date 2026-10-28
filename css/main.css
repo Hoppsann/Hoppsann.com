@@ -170,23 +170,6 @@ body.theme-code {
     z-index: 1002;
 }
 
-#asciiFace {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    background: transparent !important;
-    font-family: "Courier New", Courier, monospace;
-    letter-spacing: 0;
-    transform: translate(-50%, -50%) translateX(var(--ascii-offset-x, 0)) scaleX(var(--ascii-scale-x, 1));
-    transform-origin: center center;
-    overflow: hidden;
-    z-index: 1003;
-    /* the ascii text is rebuilt every render; keep that work inside this box */
-    contain: strict;
-}
 
 /* =========================================
    SAWTOOTH (intro bottom edge)

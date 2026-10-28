@@ -354,10 +354,9 @@ const FACE_CONFIG = {
 
   asciiCharacters: ' .,:;i!lI1?][}{|/\\tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
   asciiColor: '#c8ffd8',
-  asciiBackground: 'transparent',
-  asciiResolution: 0.15,
-  asciiOffsetX: '-2.35%',
-  asciiScaleX: 0.94,
+  asciiResolution: 0.15,      // characters per CSS pixel (higher = smaller, more characters)
+  asciiFont: '"Courier New", Courier, monospace',
+  asciiBackdropOpacity: 0.36, // the faint points + wireframe behind the ascii
 
   ambientLightColor: 0xffffff,
   ambientLightIntensity: 1,
@@ -403,7 +402,231 @@ function readFace() {
   if (face.ready && face.visible) face.rect = face.container.getBoundingClientRect();
 }
 
-function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, AsciiEffect }) {
+// ---------------------------------------------------------
+// ASCII PASS (GPU)
+//
+// Replaces three's AsciiEffect, which every frame copied the WebGL image
+// back to the CPU, built a huge HTML string and re-laid-out a <table>.
+// Here the scene is rendered to a texture and a shader draws each
+// character straight from a glyph atlas: no readback, no DOM.
+// ---------------------------------------------------------
+
+function createAsciiPass(THREE, renderer, CONFIG) {
+  const chars = CONFIG.asciiCharacters;
+  const charCount = chars.length;
+
+  // full-size shaded image the characters are picked from
+  const sceneTarget = new THREE.WebGLRenderTarget(1, 1, { samples: 4 });
+  // one texel per character column / half row (like AsciiEffect's small canvas)
+  const smallTarget = new THREE.WebGLRenderTarget(1, 1, {
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    depthBuffer: false,
+  });
+
+  const atlasCanvas = document.createElement('canvas');
+  const atlas = new THREE.CanvasTexture(atlasCanvas);
+  atlas.minFilter = THREE.LinearFilter;
+  atlas.magFilter = THREE.LinearFilter;
+  atlas.generateMipmaps = false;
+
+  const hex = CONFIG.asciiColor.replace('#', '');
+  const color = new THREE.Vector3(
+    parseInt(hex.slice(0, 2), 16) / 255,
+    parseInt(hex.slice(2, 4), 16) / 255,
+    parseInt(hex.slice(4, 6), 16) / 255
+  );
+
+  const fullscreenVertex = /* glsl */`
+    void main() {
+      gl_Position = vec4(position.xy, 0.0, 1.0);
+    }
+  `;
+
+  // 1) shrink the image to one brightness value per character
+  const downsampleMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      tScene: { value: sceneTarget.texture },
+      uSmallSize: { value: new THREE.Vector2(1, 1) },
+    },
+    vertexShader: fullscreenVertex,
+    fragmentShader: /* glsl */`
+      uniform sampler2D tScene;
+      uniform vec2 uSmallSize;
+
+      vec3 toSrgb(vec3 c) {
+        return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+      }
+
+      void main() {
+        // one filtered sample per character, like AsciiEffect's drawImage downscale
+        vec4 s = texture2D(tScene, gl_FragCoord.xy / uSmallSize);
+        // transparent = brightness 1 = space, same as AsciiEffect
+        float brightness = 1.0;
+        if (s.a > 0.0) {
+          vec3 c = toSrgb(clamp(s.rgb / s.a, 0.0, 1.0));
+          brightness = dot(c, vec3(0.3, 0.59, 0.11));
+        }
+        gl_FragColor = vec4(brightness, 0.0, 0.0, 1.0);
+      }
+    `,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.NoBlending,
+  });
+
+  // 2) fade what's already on the canvas (the points + wireframe backdrop)
+  const dimMaterial = new THREE.ShaderMaterial({
+    uniforms: { uKeep: { value: CONFIG.asciiBackdropOpacity } },
+    vertexShader: fullscreenVertex,
+    fragmentShader: /* glsl */`
+      uniform float uKeep;
+      void main() {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - uKeep);
+      }
+    `,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    blending: THREE.CustomBlending,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
+    // alpha: keep only uKeep of what was there
+    blendSrcAlpha: THREE.ZeroFactor,
+    blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
+  });
+
+  // 3) draw the characters from the glyph atlas
+  const glyphMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      tSmall: { value: smallTarget.texture },
+      tAtlas: { value: atlas },
+      uResolution: { value: new THREE.Vector2(1, 1) },
+      uSmallSize: { value: new THREE.Vector2(1, 1) },
+      uCellPx: { value: new THREE.Vector2(1, 1) },
+      uCharCount: { value: charCount },
+      uColor: { value: color },
+    },
+    vertexShader: fullscreenVertex,
+    fragmentShader: /* glsl */`
+      uniform sampler2D tSmall;
+      uniform sampler2D tAtlas;
+      uniform vec2 uResolution;
+      uniform vec2 uSmallSize;
+      uniform vec2 uCellPx;
+      uniform float uCharCount;
+      uniform vec3 uColor;
+
+      void main() {
+        // character grid starts in the top-left corner
+        vec2 fromTop = vec2(gl_FragCoord.x, uResolution.y - gl_FragCoord.y);
+        vec2 cellPos = fromTop / uCellPx;
+        vec2 cell = floor(cellPos);
+        vec2 inCell = fract(cellPos);
+
+        // each text row uses every other row of the small image
+        float smallRow = cell.y * 2.0;
+        if (cell.x >= uSmallSize.x || smallRow >= uSmallSize.y) discard;
+
+        vec2 uv = vec2(cell.x + 0.5, uSmallSize.y - smallRow - 0.5) / uSmallSize;
+        float brightness = texture2D(tSmall, uv).r;
+
+        float idx = floor((1.0 - brightness) * (uCharCount - 1.0) + 0.5);
+        if (idx < 0.5) discard; // space
+
+        float glyph = texture2D(tAtlas, vec2((idx + inCell.x) / uCharCount, 1.0 - inCell.y)).a;
+        if (glyph < 0.02) discard;
+        gl_FragColor = vec4(uColor * glyph, glyph); // premultiplied
+      }
+    `,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    blending: THREE.CustomBlending,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
+  });
+
+  const quadScene = new THREE.Scene();
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), downsampleMaterial);
+  quad.frustumCulled = false;
+  quadScene.add(quad);
+  const quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+  function drawQuad(material, target) {
+    quad.material = material;
+    renderer.setRenderTarget(target);
+    renderer.render(quadScene, quadCamera);
+  }
+
+  function drawAtlas(cellW, cellH) {
+    const w = Math.ceil(cellW);
+    const h = Math.ceil(cellH);
+    atlasCanvas.width = w * charCount;
+    atlasCanvas.height = h;
+
+    const ctx = atlasCanvas.getContext('2d');
+    ctx.clearRect(0, 0, atlasCanvas.width, h);
+    ctx.fillStyle = '#fff';
+    ctx.font = `${cellH}px ${CONFIG.asciiFont}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // monospace glyphs are ~0.6em wide; squeeze them a little to fit the cell
+    const squeeze = Math.min(1, (cellW / (cellH * 0.6)) * 1.1);
+    for (let i = 0; i < charCount; i++) {
+      ctx.save();
+      ctx.translate(i * w + w / 2, h / 2);
+      ctx.scale(squeeze, 1);
+      ctx.fillText(chars[i], 0, 0);
+      ctx.restore();
+    }
+    atlas.needsUpdate = true;
+  }
+
+  return {
+    setSize(cssWidth, cssHeight, pixelRatio) {
+      const w = Math.max(1, Math.round(cssWidth * pixelRatio));
+      const h = Math.max(1, Math.round(cssHeight * pixelRatio));
+      sceneTarget.setSize(w, h);
+
+      // same grid as AsciiEffect: resolution * size, one text row per two image rows
+      const smallW = Math.max(1, Math.floor(cssWidth * CONFIG.asciiResolution));
+      const smallH = Math.max(1, Math.floor(cssHeight * CONFIG.asciiResolution));
+      smallTarget.setSize(smallW, smallH);
+      downsampleMaterial.uniforms.uSmallSize.value.set(smallW, smallH);
+      glyphMaterial.uniforms.uSmallSize.value.set(smallW, smallH);
+
+      const cellW = (w / smallW);
+      const cellH = (h / smallH) * 2;
+      glyphMaterial.uniforms.uResolution.value.set(w, h);
+      glyphMaterial.uniforms.uCellPx.value.set(cellW, cellH);
+      drawAtlas(cellW, cellH);
+    },
+
+    // the caller sets up which objects are visible for each step
+    renderSource(scene, camera) {
+      renderer.setRenderTarget(sceneTarget);
+      renderer.render(scene, camera);
+      drawQuad(downsampleMaterial, smallTarget);
+      renderer.setRenderTarget(null);
+    },
+
+    // fade the backdrop already on the canvas, then draw the characters on top
+    drawCharacters() {
+      const autoClear = renderer.autoClear;
+      renderer.autoClear = false;
+      drawQuad(dimMaterial, null);
+      drawQuad(glyphMaterial, null);
+      renderer.autoClear = autoClear;
+    },
+  };
+}
+
+// Redraw the glyph atlas once web fonts / system fonts are ready
+const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
+
+function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler }) {
   const CONFIG = FACE_CONFIG;
   const canvas = document.querySelector('#face');
   const container = face.container;
@@ -434,23 +657,10 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, AsciiEff
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
   renderer.setClearColor(0x000000, 0);
 
-  const asciiEffect = new AsciiEffect(renderer, CONFIG.asciiCharacters, {
-    invert: false,
-    resolution: CONFIG.asciiResolution,
-  });
-  const asciiEl = asciiEffect.domElement;
-  asciiEl.id = 'asciiFace';
-  asciiEl.style.color = CONFIG.asciiColor;
-  asciiEl.style.backgroundColor = CONFIG.asciiBackground;
-  asciiEl.style.display = 'none';
-  asciiEl.style.setProperty('--ascii-offset-x', CONFIG.asciiOffsetX);
-  asciiEl.style.setProperty('--ascii-scale-x', CONFIG.asciiScaleX);
-  container.appendChild(asciiEl);
+  const asciiPass = createAsciiPass(THREE, renderer, CONFIG);
 
   canvas.style.width = '100%';
   canvas.style.height = `${CONFIG.renderAreaScaleY * 100}%`;
-  asciiEl.style.width = '100%';
-  asciiEl.style.height = `${CONFIG.renderAreaScaleY * 100}%`;
 
   function resize() {
     const renderWidth = container.clientWidth;
@@ -461,10 +671,14 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, AsciiEff
     camera.aspect = renderWidth / renderHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(renderWidth, renderHeight, false);
-    asciiEffect.setSize(renderWidth, renderHeight);
+    asciiPass.setSize(renderWidth, renderHeight, renderer.getPixelRatio());
     face.needsRender = true;
   }
   resize();
+  fontsReady.then(() => {
+    resize();
+    markDirty();
+  });
 
   let group = null;
   let pointsWireGroup = null;
@@ -586,11 +800,9 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, AsciiEff
 
   function applyVisibility() {
     const s = face.style;
-    canvas.style.opacity = s === 'code' ? '0.36' : '1';
-    asciiEl.style.display = s === 'code' ? 'block' : 'none';
-
     if (!group) return;
     if (s === 'create') ensureVoxels();
+
 
     pointsWireGroup.visible = s === 'default';
     solidGroup.visible = s === 'capture';
@@ -626,23 +838,20 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, AsciiEff
 
     group = new THREE.Group();
 
+    const pointsMaterial = new THREE.PointsMaterial({
+      size: radius * CONFIG.pointSize,
+      color: CONFIG.pointColor,
+      sizeAttenuation: true,
+    });
+    const wireMaterial = new THREE.LineBasicMaterial({
+      color: CONFIG.wireframeColor,
+      transparent: true,
+      opacity: CONFIG.wireframeOpacity,
+    });
+
     pointsWireGroup = new THREE.Group();
-    pointsWireGroup.add(new THREE.Points(
-      geometry,
-      new THREE.PointsMaterial({
-        size: radius * CONFIG.pointSize,
-        color: CONFIG.pointColor,
-        sizeAttenuation: true,
-      })
-    ));
-    pointsWireGroup.add(new THREE.LineSegments(
-      wireGeometry,
-      new THREE.LineBasicMaterial({
-        color: CONFIG.wireframeColor,
-        transparent: true,
-        opacity: CONFIG.wireframeOpacity,
-      })
-    ));
+    pointsWireGroup.add(new THREE.Points(geometry, pointsMaterial));
+    pointsWireGroup.add(new THREE.LineSegments(wireGeometry, wireMaterial));
 
     solidGroup = new THREE.Group();
     solidGroup.add(new THREE.Mesh(
@@ -726,14 +935,18 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, AsciiEff
     face.needsRender = false;
 
     if (face.style === 'code' && group) {
-      // pass 1: the ascii version
-      asciiEffect.render(scene, camera);
-      // pass 2: faint points+wireframe on the canvas underneath
-      pointsWireGroup.visible = true;
-      asciiGroup.visible = false;
-      renderer.render(scene, camera);
-      pointsWireGroup.visible = false;
+      // pass 1: the shaded source image the characters are picked from
       asciiGroup.visible = true;
+      pointsWireGroup.visible = false;
+      asciiPass.renderSource(scene, camera);
+      // pass 2: points + wireframe on the canvas (faded in pass 3)
+      asciiGroup.visible = false;
+      pointsWireGroup.visible = true;
+      renderer.render(scene, camera);
+      // pass 3: the characters on top
+      asciiPass.drawCharacters();
+      asciiGroup.visible = true;
+      pointsWireGroup.visible = false;
     } else {
       renderer.render(scene, camera);
     }
@@ -760,9 +973,8 @@ Promise.all([
   import('three/addons/loaders/GLTFLoader.js'),
   import('three/addons/loaders/DRACOLoader.js'),
   import('three/addons/math/MeshSurfaceSampler.js'),
-  import('three/addons/effects/AsciiEffect.js'),
-]).then(([THREE, { GLTFLoader }, { DRACOLoader }, { MeshSurfaceSampler }, { AsciiEffect }]) => {
-  initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, AsciiEffect });
+]).then(([THREE, { GLTFLoader }, { DRACOLoader }, { MeshSurfaceSampler }]) => {
+  initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler });
 }).catch(err => console.error('[face] three.js failed to load', err));
 
 // ---------------------------------------------------------
