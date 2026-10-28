@@ -1,139 +1,212 @@
 // =========================================
 // GALLERY — inline section below cards
+//
+// The grid shows small WebP thumbnails from /img/gallery/thumbs/
+// (made by tools/make_thumbs.py). The lightbox shows the full image.
+// If a thumbnail is missing, the full image is used instead.
 // =========================================
 
-const PHOTOS_URL = '/data/photos.json';
+(() => {
+  const PHOTOS_URL = '/data/photos.json';
+  const THUMB_DIR = '/img/gallery/thumbs/';
 
-let photos = [];
-let currentIndex = 0;
-let loaded = false;
+  let photos = [];
+  let currentIndex = 0;
+  let loadPromise = null;
+  let built = false;
 
-// ---- data ----
+  const $ = (id) => document.getElementById(id);
 
-async function loadPhotos() {
-  const res = await fetch(PHOTOS_URL);
-  if (!res.ok) throw new Error(`photos.json not found (${res.status})`);
-  const data = await res.json();
-  photos = data.photos;
-  loaded = true;
-}
+  // ---- data ----
 
-// ---- grid ----
+  function thumbFor(photo) {
+    if (photo.thumb) return photo.thumb;
+    const file = photo.src.split('/').pop().replace(/\.[^.]+$/, '');
+    return `${THUMB_DIR}${file}.webp`;
+  }
 
-function buildGrid() {
-  const grid = document.getElementById('gallery-grid');
-  grid.innerHTML = '';
+  function loadPhotos() {
+    if (!loadPromise) {
+      loadPromise = fetch(PHOTOS_URL)
+        .then(res => {
+          if (!res.ok) throw new Error(`photos.json not found (${res.status})`);
+          return res.json();
+        })
+        .then(data => {
+          photos = data.photos || [];
+        })
+        .catch(err => {
+          loadPromise = null; // allow a retry on the next click
+          throw err;
+        });
+    }
+    return loadPromise;
+  }
 
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('visible');
-        observer.unobserve(entry.target);
+  // ---- grid ----
+
+  function buildGrid() {
+    const grid = $('gallery-grid');
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          observer.unobserve(entry.target);
+        }
       }
+    }, { rootMargin: '300px 0px' });
+
+    // build everything off-DOM, then insert once
+    const fragment = document.createDocumentFragment();
+
+    photos.forEach((photo, i) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'gallery-item';
+      item.dataset.index = i;
+      item.setAttribute('aria-label', `Open photo ${i + 1}`);
+
+      const img = document.createElement('img');
+      img.src = thumbFor(photo);
+      img.alt = photo.alt || '';
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      // reserves the right space before the image loads (no layout jumps)
+      if (photo.width && photo.height) {
+        img.width = photo.width;
+        img.height = photo.height;
+      }
+      img.addEventListener('error', () => {
+        if (img.src !== new URL(photo.src, location.href).href) img.src = photo.src;
+      }, { once: true });
+
+      item.appendChild(img);
+      fragment.appendChild(item);
+      observer.observe(item);
     });
-  }, { rootMargin: '300px 0px' });
 
-  photos.forEach((photo, i) => {
-    const item = document.createElement('div');
-    item.className = 'gallery-item';
-    const img = document.createElement('img');
-    img.src = photo.src;
-    img.alt = photo.alt || '';
-    img.loading = 'lazy';
-    img.decoding = 'async';
-    item.appendChild(img);
-    item.addEventListener('click', () => openLightbox(i));
-    grid.appendChild(item);
-    observer.observe(item);
-  });
-}
+    grid.replaceChildren(fragment);
+    built = true;
+  }
 
-// ---- open / close ----
+  // ---- open / close ----
 
-async function openGallery() {
-  const section = document.getElementById('gallery-section');
-  section.classList.add('is-open');
+  async function openGallery() {
+    $('gallery-section').classList.add('is-open');
+    if (built) return;
 
-  if (!loaded) {
+    const grid = $('gallery-grid');
+    grid.innerHTML = '<p class="gallery-loading">Loading…</p>';
+
     try {
-      document.getElementById('gallery-grid').innerHTML =
-        '<p class="gallery-loading">Loading…</p>';
       await loadPhotos();
       buildGrid();
     } catch (e) {
-      document.getElementById('gallery-grid').innerHTML =
-        `<p class="gallery-loading">Error: ${e.message}</p>`;
+      grid.innerHTML = '';
+      const p = document.createElement('p');
+      p.className = 'gallery-loading';
+      p.textContent = `Error: ${e.message}`;
+      grid.appendChild(p);
       console.error('[gallery]', e);
     }
   }
-}
 
-function closeGallery() {
-  document.getElementById('gallery-section').classList.remove('is-open');
-}
+  function closeGallery() {
+    $('gallery-section').classList.remove('is-open');
+  }
 
-// ---- lightbox ----
+  // ---- lightbox ----
 
-function openLightbox(index) {
-  currentIndex = index;
-  const lb   = document.getElementById('lightbox');
-  const img  = document.getElementById('lightbox-img');
-  const ctr  = document.getElementById('lightbox-counter');
-  img.src    = photos[index].src;
-  img.alt    = photos[index].alt || '';
-  ctr.textContent = `${index + 1} / ${photos.length}`;
-  lb.classList.add('is-open');
-}
+  function preload(index) {
+    const photo = photos[(index + photos.length) % photos.length];
+    if (photo) new Image().src = photo.src;
+  }
 
-function closeLightbox() {
-  document.getElementById('lightbox').classList.remove('is-open');
-}
+  function showPhoto(index) {
+    if (!photos.length) return;
+    currentIndex = (index + photos.length) % photos.length;
+    const photo = photos[currentIndex];
 
-function navigate(dir) {
-  currentIndex = (currentIndex + dir + photos.length) % photos.length;
-  openLightbox(currentIndex);
-}
+    const img = $('lightbox-img');
+    // show the (already loaded) thumbnail instantly, then swap in the full image
+    img.src = thumbFor(photo);
+    img.alt = photo.alt || '';
 
-// ---- init ----
-
-document.addEventListener('DOMContentLoaded', () => {
-
-  // card1 toggles gallery; card2/3 close it
-  document.querySelector('.card1')?.addEventListener('click', () => {
-    openGallery();
-  });
-  document.querySelector('.card2')?.addEventListener('click', closeGallery);
-  document.querySelector('.card3')?.addEventListener('click', closeGallery);
-
-  // lightbox controls
-  document.getElementById('lightbox-close')
-    .addEventListener('click', closeLightbox);
-  document.getElementById('lightbox-prev')
-    .addEventListener('click', () => navigate(-1));
-  document.getElementById('lightbox-next')
-    .addEventListener('click', () => navigate(1));
-
-  // click backdrop to close lightbox
-  document.getElementById('lightbox')
-    .addEventListener('click', (e) => {
-      if (e.target === e.currentTarget) closeLightbox();
+    const full = new Image();
+    full.decoding = 'async';
+    full.src = photo.src;
+    full.decode().then(() => {
+      if (photos[currentIndex] === photo) img.src = photo.src;
+    }).catch(() => {
+      if (photos[currentIndex] === photo) img.src = photo.src;
     });
 
-  // keyboard
-  document.addEventListener('keydown', (e) => {
-    const lb = document.getElementById('lightbox');
-    const lbOpen = lb.classList.contains('is-open');
-    if (e.key === 'Escape' && lbOpen) closeLightbox();
-    if (lbOpen && e.key === 'ArrowLeft')  navigate(-1);
-    if (lbOpen && e.key === 'ArrowRight') navigate(1);
-  });
+    $('lightbox-counter').textContent = `${currentIndex + 1} / ${photos.length}`;
 
-  // swipe in lightbox
-  let touchStartX = 0;
-  document.getElementById('lightbox').addEventListener('touchstart',
-    (e) => { touchStartX = e.touches[0].clientX; }, { passive: true });
-  document.getElementById('lightbox').addEventListener('touchend', (e) => {
-    const dx = e.changedTouches[0].clientX - touchStartX;
-    if (Math.abs(dx) > 50) navigate(dx < 0 ? 1 : -1);
+    preload(currentIndex + 1);
+    preload(currentIndex - 1);
+  }
+
+  function openLightbox(index) {
+    showPhoto(index);
+    $('lightbox').classList.add('is-open');
+    document.documentElement.classList.add('lightbox-open');
+  }
+
+  function closeLightbox() {
+    $('lightbox').classList.remove('is-open');
+    document.documentElement.classList.remove('lightbox-open');
+  }
+
+  function isLightboxOpen() {
+    return $('lightbox').classList.contains('is-open');
+  }
+
+  // ---- init ----
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // card1 opens the gallery; card2/3 close it
+    document.querySelector('.card1')?.addEventListener('click', openGallery);
+    document.querySelector('.card2')?.addEventListener('click', closeGallery);
+    document.querySelector('.card3')?.addEventListener('click', closeGallery);
+
+    // one listener for the whole grid instead of one per photo
+    $('gallery-grid').addEventListener('click', (e) => {
+      const item = e.target.closest('.gallery-item');
+      if (item) openLightbox(Number(item.dataset.index));
+    });
+
+    $('lightbox-close').addEventListener('click', closeLightbox);
+    $('lightbox-prev').addEventListener('click', () => showPhoto(currentIndex - 1));
+    $('lightbox-next').addEventListener('click', () => showPhoto(currentIndex + 1));
+
+    // click the dark backdrop to close
+    $('lightbox').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget || e.target.id === 'lightbox-img-wrap') closeLightbox();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (!isLightboxOpen()) return;
+      if (e.key === 'Escape') closeLightbox();
+      else if (e.key === 'ArrowLeft') showPhoto(currentIndex - 1);
+      else if (e.key === 'ArrowRight') showPhoto(currentIndex + 1);
+    });
+
+    // swipe in the lightbox
+    let touchStartX = 0;
+    let touchStartY = 0;
+    const lb = $('lightbox');
+    lb.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    lb.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+        showPhoto(currentIndex + (dx < 0 ? 1 : -1));
+      }
+    }, { passive: true });
   });
-});
+})();

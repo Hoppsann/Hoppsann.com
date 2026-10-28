@@ -1,683 +1,756 @@
-window.addEventListener("DOMContentLoaded", () => {
+// =========================================================
+// hoppsann.com — main script
+//
+// Performance notes:
+// - ONE requestAnimationFrame loop drives cursor, cards, contact link
+//   and the 3D face. All DOM reads happen before any DOM writes in a
+//   frame, so the browser never has to recalculate layout mid-frame.
+// - The loop goes idle when nothing moves (no mouse movement, no scroll,
+//   springs settled), and the 3D face only re-renders when it actually
+//   changed and is on screen.
+// - The heavy voxel mesh is built in idle time after load instead of
+//   blocking the page.
+// =========================================================
 
-  const TARGET_FRAME_MS = 1000 / 60;
-  const ANIMATION_SPEED = 2;
+const TARGET_FRAME_MS = 1000 / 60;
+const ANIMATION_SPEED = 2;
+const EPSILON = 0.01;
 
-  function getFrameFactor(timestamp, lastTimestamp) {
-    if (!lastTimestamp) return 1;
-    return Math.min((timestamp - lastTimestamp) / TARGET_FRAME_MS, 3) * ANIMATION_SPEED;
+const isTouch = window.matchMedia('(hover: none), (pointer: coarse)').matches;
+const mobileMediaQuery = window.matchMedia('(max-width: 768px)');
+
+function getFrameFactor(timestamp, lastTimestamp) {
+  if (!lastTimestamp) return 1;
+  return Math.min((timestamp - lastTimestamp) / TARGET_FRAME_MS, 3) * ANIMATION_SPEED;
+}
+
+function clamp(v, min, max) {
+  return Math.min(Math.max(v, min), max);
+}
+
+function distanceToRect(px, py, rect) {
+  const dx = Math.max(rect.left - px, 0, px - rect.right);
+  const dy = Math.max(rect.top - py, 0, py - rect.bottom);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+// ---------------------------------------------------------
+// Shared state
+// ---------------------------------------------------------
+
+const state = {
+  mouseX: window.innerWidth / 2,
+  mouseY: window.innerHeight / 2,
+  isDown: false,
+  themed: false,       // true once a card theme is chosen
+  dirty: true,         // something changed that needs a frame
+};
+
+function markDirty() {
+  state.dirty = true;
+  wake();
+}
+
+// ---------------------------------------------------------
+// CURSOR (spring + click)
+// ---------------------------------------------------------
+
+const CURSOR_CONFIG = {
+  size: 30,
+  stiffness: 0.1,
+  friction: 0.8,
+  stretch: 0.03,
+  clickScale: 0.75,
+  clickSpring: 0.1,
+  clickDamping: 0.8,
+};
+
+const cursorEl = document.getElementById('cursor');
+cursorEl.style.width = `${CURSOR_CONFIG.size}px`;
+cursorEl.style.height = `${CURSOR_CONFIG.size}px`;
+
+const cursor = {
+  x: state.mouseX,
+  y: state.mouseY,
+  vx: 0,
+  vy: 0,
+  angle: 0,
+  clickScale: 1,
+  clickV: 0,
+};
+
+function updateCursor(f) {
+  const dx = state.mouseX - cursor.x;
+  const dy = state.mouseY - cursor.y;
+
+  cursor.vx += dx * CURSOR_CONFIG.stiffness * f;
+  cursor.vy += dy * CURSOR_CONFIG.stiffness * f;
+
+  const friction = Math.pow(CURSOR_CONFIG.friction, f);
+  cursor.vx *= friction;
+  cursor.vy *= friction;
+
+  cursor.x += cursor.vx * f;
+  cursor.y += cursor.vy * f;
+
+  const speed = Math.sqrt(cursor.vx * cursor.vx + cursor.vy * cursor.vy);
+  if (speed > 0.1) {
+    cursor.angle = Math.atan2(cursor.vy, cursor.vx) * 180 / Math.PI;
   }
 
-  // =========================
-  // CURSOR (spring + click)
-  // =========================
+  const targetClick = state.isDown ? CURSOR_CONFIG.clickScale : 1;
+  cursor.clickV += (targetClick - cursor.clickScale) * CURSOR_CONFIG.clickSpring * f;
+  cursor.clickV *= Math.pow(CURSOR_CONFIG.clickDamping, f);
+  cursor.clickScale += cursor.clickV * f;
 
-  const cursor = document.getElementById("cursor");
+  // settled = close to the mouse and not moving
+  return (
+    Math.abs(dx) < EPSILON * 10 &&
+    Math.abs(dy) < EPSILON * 10 &&
+    speed < EPSILON &&
+    Math.abs(targetClick - cursor.clickScale) < 0.001 &&
+    Math.abs(cursor.clickV) < 0.001
+  );
+}
 
-  const CURSOR_CONFIG = {
-    size: 30,
+function writeCursor() {
+  const speed = Math.sqrt(cursor.vx * cursor.vx + cursor.vy * cursor.vy);
+  const moveStretch = 1 + speed * CURSOR_CONFIG.stretch;
+  const sx = moveStretch * cursor.clickScale;
+  const sy = (1 / moveStretch) * cursor.clickScale;
 
-    stiffness: 0.1,
-    friction: 0.8,
+  // transform only: no layout, runs on the compositor
+  cursorEl.style.transform =
+    `translate3d(${cursor.x}px, ${cursor.y}px, 0) translate(-50%, -50%) ` +
+    `rotate(${cursor.angle}deg) scale(${sx}, ${sy})`;
+}
 
-    stretch: 0.03,
+if (!isTouch) {
+  window.addEventListener('mousemove', (e) => {
+    state.mouseX = e.clientX;
+    state.mouseY = e.clientY;
+    markDirty();
+  }, { passive: true });
 
-    clickScale: 0.75,
-    clickSpring: 0.1,
-    clickDamping: 0.8
+  window.addEventListener('mousedown', () => { state.isDown = true; markDirty(); });
+  window.addEventListener('mouseup', () => { state.isDown = false; markDirty(); });
+} else {
+  cursorEl.style.display = 'none';
+}
+
+window.addEventListener('scroll', markDirty, { passive: true });
+window.addEventListener('resize', () => {
+  face.needsResize = true;
+  markDirty();
+}, { passive: true });
+
+// ---------------------------------------------------------
+// CARDS (tilt + glare + grayscale)
+// ---------------------------------------------------------
+
+const CARD_CONFIG = {
+  maxColorDistance: 200,
+  maxTiltDegree: 5,
+  maxGlareOpacity: 0.2,
+  outsideThreshold: 200,
+};
+
+const cards = Array.from(document.querySelectorAll('.cards > .card')).map(el => ({
+  el,
+  glare: el.querySelector('.glare'),
+  rect: null,
+  // last written values, so unchanged styles aren't rewritten every frame
+  lastTransform: '',
+  lastGlareTransform: '',
+  lastGlareOpacity: '',
+  lastFilter: '',
+}));
+
+function readCards() {
+  for (const card of cards) card.rect = card.el.getBoundingClientRect();
+}
+
+function writeCards() {
+  const x = cursor.x;
+  const y = cursor.y;
+
+  for (const card of cards) {
+    const rect = card.rect;
+    const hw = rect.width / 2;
+    const hh = rect.height / 2;
+
+    const dx = x - (rect.left + hw);
+    const dy = y - (rect.top + hh);
+
+    const rx = clamp(dy / hh, -1, 1);
+    const ry = clamp(dx / hw, -1, 1);
+
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const norm = clamp(dist / Math.max(hw, hh), 0, 1);
+
+    const outside = distanceToRect(x, y, rect);
+    const intensity = 1 - clamp(outside / CARD_CONFIG.outsideThreshold, 0, 1);
+    const colorAmount = 1 - clamp(outside / CARD_CONFIG.maxColorDistance, 0, 1);
+
+    const filter = state.themed
+      ? 'grayscale(0)'
+      : `grayscale(${(1 - colorAmount).toFixed(2)})`;
+
+    const degree = norm * CARD_CONFIG.maxTiltDegree * intensity;
+
+    const transform =
+      `perspective(400px) rotate3d(${(-rx).toFixed(3)}, ${ry.toFixed(3)}, 0, ${degree.toFixed(2)}deg)`;
+    const glareTransform =
+      `translate(${(-ry * 100).toFixed(1)}%, ${(-rx * 100).toFixed(1)}%) scale(5)`;
+    const glareOpacity = (norm * CARD_CONFIG.maxGlareOpacity * intensity).toFixed(3);
+
+    if (filter !== card.lastFilter) {
+      card.el.style.filter = filter;
+      card.lastFilter = filter;
+    }
+    if (transform !== card.lastTransform) {
+      card.el.style.transform = transform;
+      card.lastTransform = transform;
+    }
+    if (glareTransform !== card.lastGlareTransform) {
+      card.glare.style.transform = glareTransform;
+      card.lastGlareTransform = glareTransform;
+    }
+    if (glareOpacity !== card.lastGlareOpacity) {
+      card.glare.style.opacity = glareOpacity;
+      card.lastGlareOpacity = glareOpacity;
+    }
+  }
+}
+
+// ---------------------------------------------------------
+// CONTACT LINK (scale up when the cursor gets close)
+// ---------------------------------------------------------
+
+const CONTACT_CONFIG = {
+  smallestSize: 1.0,
+  biggestSize: 1.1,
+  effectDistance: 250,
+};
+
+const contact = {
+  el: document.getElementById('contact'),
+  rect: null,
+  lastScale: '',
+};
+
+function readContact() {
+  if (!contact.el) return;
+  // the element is scaled from its centre, so the transformed rect is
+  // close enough to the real one for a distance check
+  contact.rect = contact.el.getBoundingClientRect();
+}
+
+function writeContact() {
+  if (!contact.el || !contact.rect) return;
+
+  const distance = distanceToRect(state.mouseX, state.mouseY, contact.rect);
+  let scale = CONTACT_CONFIG.smallestSize;
+
+  if (distance < CONTACT_CONFIG.effectDistance) {
+    const progress = 1 - distance / CONTACT_CONFIG.effectDistance;
+    scale = CONTACT_CONFIG.smallestSize +
+      (CONTACT_CONFIG.biggestSize - CONTACT_CONFIG.smallestSize) * progress;
+  }
+
+  const value = `scale(${scale.toFixed(3)})`;
+  if (value !== contact.lastScale) {
+    contact.el.style.transform = value;
+    contact.lastScale = value;
+  }
+}
+
+// ---------------------------------------------------------
+// THEME TRANSITION (circle reveal via View Transitions API)
+// ---------------------------------------------------------
+
+function applyTheme(themeName) {
+  document.body.classList.remove('theme-capture', 'theme-create', 'theme-code');
+  document.body.classList.add(`theme-${themeName}`);
+  state.themed = true;
+  face.setStyle(themeName);
+  markDirty();
+}
+
+function triggerThemeTransition(clickX, clickY, themeName) {
+  // fallback for nettlesere uten støtte - bare bytt tema direkte
+  if (!document.startViewTransition) {
+    applyTheme(themeName);
+    return;
+  }
+
+  const maxX = Math.max(clickX, window.innerWidth - clickX);
+  const maxY = Math.max(clickY, window.innerHeight - clickY);
+  const radius = Math.sqrt(maxX * maxX + maxY * maxY);
+
+  const root = document.documentElement.style;
+  root.setProperty('--transition-x', `${clickX}px`);
+  root.setProperty('--transition-y', `${clickY}px`);
+  root.setProperty('--transition-radius', `${radius}px`);
+
+  document.startViewTransition(() => applyTheme(themeName));
+}
+
+const CARD_THEMES = { card1: 'capture', card2: 'create', card3: 'code' };
+
+for (const [cls, themeName] of Object.entries(CARD_THEMES)) {
+  const el = document.querySelector(`.${cls}`);
+  if (!el) continue;
+
+  el.addEventListener('click', (e) => {
+    // keyboard "clicks" have no pointer position: start the circle from the card's centre
+    if (e.detail === 0) {
+      const r = el.getBoundingClientRect();
+      triggerThemeTransition(r.left + r.width / 2, r.top + r.height / 2, themeName);
+    } else {
+      triggerThemeTransition(e.clientX, e.clientY, themeName);
+    }
+  });
+
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      el.click();
+    }
+  });
+}
+
+// ---------------------------------------------------------
+// THREE FACE
+// ---------------------------------------------------------
+
+const FACE_CONFIG = {
+  modelPath: '/models/face.glb',
+  dracoDecoderPath: 'https://unpkg.com/three@0.184.0/examples/jsm/libs/draco/gltf/',
+  maxPixelRatio: 2,
+
+  pointColor: 0xc0dceb,
+  pointSize: 0.005,
+
+  wireframeColor: 0xede7d8,
+  wireframeOpacity: 0.3,
+
+  captureSolidColor: 0xc0dceb,
+  captureSolidRoughness: 0.45,
+  captureSolidMetalness: 0.1,
+
+  voxelSize: 0.03,
+  voxelColor: 0x3bb0ff,
+  voxelSampleCount: 150000,
+  voxelRoughness: 0.4,
+  voxelMetalness: 0.1,
+  voxelCornerRadius: 0.2,
+  voxelSegments: 2,
+
+  asciiCharacters: ' .,:;i!lI1?][}{|/\\tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
+  asciiColor: '#c8ffd8',
+  asciiBackground: 'transparent',
+  asciiResolution: 0.15,
+  asciiOffsetX: '-2.35%',
+  asciiScaleX: 0.94,
+
+  ambientLightColor: 0xffffff,
+  ambientLightIntensity: 1,
+  directionalLightColor: 0xffffff,
+  directionalLightIntensity: 1.8,
+
+  modelOffsetX: 0,
+  modelOffsetY: -0.01,
+  modelOffsetZ: 0,
+
+  baseRotationY: Math.PI - 0.1,
+  baseRotationX: 0,
+  mouseRotationStrength: 0.3,
+
+  rotationSpring: 0.05,
+  rotationDamping: 0.92,
+
+  cameraFovMobile: 65,
+  cameraFovDesktop: 45,
+  cameraNear: 0.1,
+  cameraFar: 100,
+  cameraDistanceMultiplier: 2.5,
+  renderAreaScaleY: 1.45,
+};
+
+// The face is filled in once three.js has loaded. Until then these
+// no-op functions keep the main loop and theme code simple.
+const face = {
+  ready: false,
+  visible: true,
+  needsRender: false,
+  needsResize: false,
+  style: 'default',
+  container: document.querySelector('#heroFace'),
+  rect: null,
+  setStyle(name) { this.style = name; },
+  update() { return true; },
+  render() {},
+  resize() {},
+};
+
+function readFace() {
+  if (face.ready && face.visible) face.rect = face.container.getBoundingClientRect();
+}
+
+function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, RoundedBoxGeometry, AsciiEffect }) {
+  const CONFIG = FACE_CONFIG;
+  const canvas = document.querySelector('#face');
+  const container = face.container;
+
+  const scene = new THREE.Scene();
+  scene.add(new THREE.AmbientLight(CONFIG.ambientLightColor, CONFIG.ambientLightIntensity));
+
+  const directionalLight = new THREE.DirectionalLight(
+    CONFIG.directionalLightColor, CONFIG.directionalLightIntensity
+  );
+  directionalLight.position.set(0, -2, 4);
+  scene.add(directionalLight);
+
+  const camera = new THREE.PerspectiveCamera(
+    mobileMediaQuery.matches ? CONFIG.cameraFovMobile : CONFIG.cameraFovDesktop,
+    1,
+    CONFIG.cameraNear,
+    CONFIG.cameraFar
+  );
+
+  const renderer = new THREE.WebGLRenderer({
+    canvas,
+    alpha: true,
+    antialias: true,
+    powerPreference: 'high-performance',
+  });
+  // phones report 3x or more; rendering at that resolution is a big GPU cost
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxPixelRatio));
+  renderer.setClearColor(0x000000, 0);
+
+  const asciiEffect = new AsciiEffect(renderer, CONFIG.asciiCharacters, {
+    invert: false,
+    resolution: CONFIG.asciiResolution,
+  });
+  const asciiEl = asciiEffect.domElement;
+  asciiEl.id = 'asciiFace';
+  asciiEl.style.color = CONFIG.asciiColor;
+  asciiEl.style.backgroundColor = CONFIG.asciiBackground;
+  asciiEl.style.display = 'none';
+  asciiEl.style.setProperty('--ascii-offset-x', CONFIG.asciiOffsetX);
+  asciiEl.style.setProperty('--ascii-scale-x', CONFIG.asciiScaleX);
+  container.appendChild(asciiEl);
+
+  canvas.style.width = '100%';
+  canvas.style.height = `${CONFIG.renderAreaScaleY * 100}%`;
+  asciiEl.style.width = '100%';
+  asciiEl.style.height = `${CONFIG.renderAreaScaleY * 100}%`;
+
+  function resize() {
+    const renderWidth = container.clientWidth;
+    const renderHeight = container.clientHeight * CONFIG.renderAreaScaleY;
+    if (!renderWidth || !renderHeight) return;
+
+    camera.fov = mobileMediaQuery.matches ? CONFIG.cameraFovMobile : CONFIG.cameraFovDesktop;
+    camera.aspect = renderWidth / renderHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(renderWidth, renderHeight, false);
+    asciiEffect.setSize(renderWidth, renderHeight);
+    face.needsRender = true;
+  }
+  resize();
+
+  let group = null;
+  let pointsWireGroup = null;
+  let solidGroup = null;
+  let voxelGroup = null;
+  let asciiGroup = null;
+  let sourceMesh = null;
+  let modelRadius = 1;
+
+  let rotVX = 0;
+  let rotVY = 0;
+
+  function buildVoxelMesh() {
+    const voxelSize = modelRadius * CONFIG.voxelSize;
+    const sampler = new MeshSurfaceSampler(sourceMesh).build();
+    const p = new THREE.Vector3();
+
+    // numeric keys are much faster than string keys
+    const seen = new Set();
+    const positions = [];
+    const OFFSET = 1024;
+    const SPAN = 2048;
+
+    for (let i = 0; i < CONFIG.voxelSampleCount; i++) {
+      sampler.sample(p);
+      const vx = Math.round(p.x / voxelSize);
+      const vy = Math.round(p.y / voxelSize);
+      const vz = Math.round(p.z / voxelSize);
+      const key = ((vx + OFFSET) * SPAN + (vy + OFFSET)) * SPAN + (vz + OFFSET);
+      if (!seen.has(key)) {
+        seen.add(key);
+        positions.push(vx * voxelSize, vy * voxelSize, vz * voxelSize);
+      }
+    }
+
+    const boxGeometry = new RoundedBoxGeometry(
+      voxelSize, voxelSize, voxelSize,
+      CONFIG.voxelSegments,
+      voxelSize * CONFIG.voxelCornerRadius
+    );
+    const boxMaterial = new THREE.MeshStandardMaterial({
+      color: CONFIG.voxelColor,
+      roughness: CONFIG.voxelRoughness,
+      metalness: CONFIG.voxelMetalness,
+    });
+
+    const count = positions.length / 3;
+    const instancedMesh = new THREE.InstancedMesh(boxGeometry, boxMaterial, count);
+    const matrix = new THREE.Matrix4();
+    for (let i = 0; i < count; i++) {
+      matrix.makeTranslation(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+      instancedMesh.setMatrixAt(i, matrix);
+    }
+    instancedMesh.instanceMatrix.needsUpdate = true;
+    return instancedMesh;
+  }
+
+  function ensureVoxels() {
+    if (voxelGroup.children.length || !sourceMesh) return;
+    voxelGroup.add(buildVoxelMesh());
+  }
+
+  function applyVisibility() {
+    const s = face.style;
+    canvas.style.opacity = s === 'code' ? '0.36' : '1';
+    asciiEl.style.display = s === 'code' ? 'block' : 'none';
+
+    if (!group) return;
+    if (s === 'create') ensureVoxels();
+
+    pointsWireGroup.visible = s === 'default';
+    solidGroup.visible = s === 'capture';
+    voxelGroup.visible = s === 'create';
+    asciiGroup.visible = s === 'code';
+  }
+
+  face.setStyle = (name) => {
+    face.style = name;
+    applyVisibility();
+    face.needsRender = true;
   };
 
-  cursor.style.width = `${CURSOR_CONFIG.size}px`;
-  cursor.style.height = `${CURSOR_CONFIG.size}px`;
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath(CONFIG.dracoDecoderPath);
+  const loader = new GLTFLoader();
+  loader.setDRACOLoader(dracoLoader);
 
- let mouseX = window.innerWidth / 2;
-let mouseY = window.innerHeight / 2;
-
-let cx = window.innerWidth / 2;
-let cy = window.innerHeight / 2;
-
-  let cvx = 0;
-  let cvy = 0;
-
-  let angle = 0;
-
-  let isDown = false;
-  let clickScale = 1;
-  let clickV = 0;
-  let lastCursorTimestamp = 0;
-
-  window.addEventListener("mousemove", (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-  });
-
-  window.addEventListener("mousedown", () => isDown = true);
-  window.addEventListener("mouseup", () => isDown = false);
-
-  function animateCursor(timestamp) {
-    const frameFactor = getFrameFactor(timestamp, lastCursorTimestamp);
-    lastCursorTimestamp = timestamp;
-
-    let dx = mouseX - cx;
-    let dy = mouseY - cy;
-
-    cvx += dx * CURSOR_CONFIG.stiffness * frameFactor;
-    cvy += dy * CURSOR_CONFIG.stiffness * frameFactor;
-
-    const cursorFriction = Math.pow(CURSOR_CONFIG.friction, frameFactor);
-    cvx *= cursorFriction;
-    cvy *= cursorFriction;
-
-    cx += cvx * frameFactor;
-    cy += cvy * frameFactor;
-
-    let speed = Math.sqrt(cvx * cvx + cvy * cvy);
-
-    if (speed > 0.1) {
-      angle = Math.atan2(cvy, cvx) * 180 / Math.PI;
-    }
-
-    let moveStretch = 1 + speed * CURSOR_CONFIG.stretch;
-
-    const targetClick = isDown ? CURSOR_CONFIG.clickScale : 1;
-
-    clickV += (targetClick - clickScale) * CURSOR_CONFIG.clickSpring * frameFactor;
-    clickV *= Math.pow(CURSOR_CONFIG.clickDamping, frameFactor);
-    clickScale += clickV * frameFactor;
-
-    const sx = moveStretch * clickScale;
-    const sy = (1 / moveStretch) * clickScale;
-
-    cursor.style.left = `${cx}px`;
-    cursor.style.top = `${cy}px`;
-
-    cursor.style.transform = `
-      translate(-50%, -50%)
-      rotate(${angle}deg)
-      scale(${sx}, ${sy})
-    `;
-
-    window.springX = cx;
-    window.springY = cy;
-
-    requestAnimationFrame(animateCursor);
-  }
-
-  requestAnimationFrame(animateCursor);
-
-
-  // =========================
-  // THEME TRANSITION (circle reveal via View Transitions API)
-  // =========================
-
-  function applyTheme(themeName) {
-    document.body.classList.remove('theme-capture', 'theme-create', 'theme-code');
-    document.body.classList.add(`theme-${themeName}`);
-
-    if (window.setFaceStyle) {
-      window.setFaceStyle(themeName);
-    }
-  }
-
-  function triggerThemeTransition(clickX, clickY, themeName) {
-    // fallback for nettlesere uten støtte - bare bytt tema direkte
-    if (!document.startViewTransition) {
-      applyTheme(themeName);
-      return;
-    }
-
-    const maxX = Math.max(clickX, window.innerWidth - clickX);
-    const maxY = Math.max(clickY, window.innerHeight - clickY);
-    const radius = Math.sqrt(maxX * maxX + maxY * maxY);
-
-    document.documentElement.style.setProperty('--transition-x', `${clickX}px`);
-    document.documentElement.style.setProperty('--transition-y', `${clickY}px`);
-    document.documentElement.style.setProperty('--transition-radius', `${radius}px`);
-
-    document.startViewTransition(() => {
-      applyTheme(themeName);
+  loader.load(CONFIG.modelPath, (gltf) => {
+    gltf.scene.traverse(c => {
+      if (c.isMesh && !sourceMesh) sourceMesh = c;
     });
+    if (!sourceMesh) return;
+
+    const geometry = sourceMesh.geometry;
+    geometry.computeBoundingSphere();
+    const { center, radius } = geometry.boundingSphere;
+    geometry.translate(-center.x, -center.y, -center.z);
+    modelRadius = radius;
+
+    // one wireframe geometry shared by both styles that need it
+    const wireGeometry = new THREE.WireframeGeometry(geometry);
+
+    group = new THREE.Group();
+
+    pointsWireGroup = new THREE.Group();
+    pointsWireGroup.add(new THREE.Points(
+      geometry,
+      new THREE.PointsMaterial({
+        size: radius * CONFIG.pointSize,
+        color: CONFIG.pointColor,
+        sizeAttenuation: true,
+      })
+    ));
+    pointsWireGroup.add(new THREE.LineSegments(
+      wireGeometry,
+      new THREE.LineBasicMaterial({
+        color: CONFIG.wireframeColor,
+        transparent: true,
+        opacity: CONFIG.wireframeOpacity,
+      })
+    ));
+
+    solidGroup = new THREE.Group();
+    solidGroup.add(new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        color: CONFIG.captureSolidColor,
+        roughness: CONFIG.captureSolidRoughness,
+        metalness: CONFIG.captureSolidMetalness,
+      })
+    ));
+
+    voxelGroup = new THREE.Group();
+
+    asciiGroup = new THREE.Group();
+    asciiGroup.add(new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({ color: 0x707070, side: THREE.BackSide })
+    ));
+    asciiGroup.add(new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+    ));
+    asciiGroup.add(new THREE.LineSegments(
+      wireGeometry,
+      new THREE.LineBasicMaterial({ color: 0x8f8f8f, transparent: true, opacity: 0.45 })
+    ));
+
+    group.add(pointsWireGroup, solidGroup, voxelGroup, asciiGroup);
+    group.position.set(CONFIG.modelOffsetX, CONFIG.modelOffsetY, CONFIG.modelOffsetZ);
+    group.rotation.y = CONFIG.baseRotationY;
+    scene.add(group);
+
+    camera.position.z = radius * CONFIG.cameraDistanceMultiplier;
+
+    applyVisibility();
+    face.needsRender = true;
+    markDirty();
+
+    // upload shaders to the GPU now instead of on the first theme click
+    renderer.compile(scene, camera);
+
+    // build the voxels while the browser is idle, not on click
+    const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1500));
+    idle(() => ensureVoxels(), { timeout: 4000 });
+  }, undefined, (err) => console.error('[face]', err));
+
+  // returns true when the rotation has settled
+  face.update = (f) => {
+    if (!group || !face.rect) return true;
+
+    const rect = face.rect;
+    const mx = (cursor.x - (rect.left + rect.width / 2)) / (rect.width / 2);
+    const my = (cursor.y - (rect.top + rect.height / 2)) / (rect.height / 2);
+
+    const targetY = CONFIG.baseRotationY + mx * CONFIG.mouseRotationStrength;
+    const targetX = CONFIG.baseRotationX + my * CONFIG.mouseRotationStrength;
+
+    rotVX += (targetY - group.rotation.y) * CONFIG.rotationSpring * f;
+    rotVY += (targetX - group.rotation.x) * CONFIG.rotationSpring * f;
+
+    const damping = Math.pow(CONFIG.rotationDamping, f);
+    rotVX *= damping;
+    rotVY *= damping;
+
+    const before = group.rotation.y + group.rotation.x * 7;
+    group.rotation.y += rotVX * f;
+    group.rotation.x += rotVY * f;
+    const moved = Math.abs(group.rotation.y + group.rotation.x * 7 - before) > 1e-5;
+
+    if (moved) face.needsRender = true;
+
+    return (
+      !moved &&
+      Math.abs(targetY - group.rotation.y) < 1e-4 &&
+      Math.abs(targetX - group.rotation.x) < 1e-4
+    );
+  };
+
+  face.render = () => {
+    if (!face.needsRender || !face.visible) return;
+    face.needsRender = false;
+
+    if (face.style === 'code' && group) {
+      // pass 1: the ascii version
+      asciiEffect.render(scene, camera);
+      // pass 2: faint points+wireframe on the canvas underneath
+      pointsWireGroup.visible = true;
+      asciiGroup.visible = false;
+      renderer.render(scene, camera);
+      pointsWireGroup.visible = false;
+      asciiGroup.visible = true;
+    } else {
+      renderer.render(scene, camera);
+    }
+  };
+
+  face.resize = resize;
+  face.ready = true;
+
+  // stop rendering the face entirely when it's scrolled out of view
+  new IntersectionObserver(([entry]) => {
+    face.visible = entry.isIntersecting;
+    if (face.visible) {
+      face.needsRender = true;
+      markDirty();
+    }
+  }, { rootMargin: '100px 0px' }).observe(container);
+
+  applyVisibility();
+  markDirty();
+}
+
+Promise.all([
+  import('three'),
+  import('three/addons/loaders/GLTFLoader.js'),
+  import('three/addons/loaders/DRACOLoader.js'),
+  import('three/addons/math/MeshSurfaceSampler.js'),
+  import('three/addons/geometries/RoundedBoxGeometry.js'),
+  import('three/addons/effects/AsciiEffect.js'),
+]).then(([THREE, { GLTFLoader }, { DRACOLoader }, { MeshSurfaceSampler }, { RoundedBoxGeometry }, { AsciiEffect }]) => {
+  initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, RoundedBoxGeometry, AsciiEffect });
+}).catch(err => console.error('[face] three.js failed to load', err));
+
+// ---------------------------------------------------------
+// MAIN LOOP
+// ---------------------------------------------------------
+
+let rafId = 0;
+let lastTimestamp = 0;
+
+function wake() {
+  if (!rafId) {
+    lastTimestamp = 0;
+    rafId = requestAnimationFrame(frame);
+  }
+}
+
+function frame(timestamp) {
+  rafId = 0;
+  const f = getFrameFactor(timestamp, lastTimestamp);
+  lastTimestamp = timestamp;
+
+  if (face.needsResize) {
+    face.needsResize = false;
+    face.resize();
   }
 
-
-  // =========================
-  // THREE FACE
-  // =========================
-
-  import("three").then(THREE => {
-    Promise.all([
-      import("three/addons/loaders/GLTFLoader.js"),
-      import("three/addons/math/MeshSurfaceSampler.js"),
-      import("three/addons/geometries/RoundedBoxGeometry.js"),
-      import("three/addons/effects/AsciiEffect.js")
-    ]).then(([{ GLTFLoader }, { MeshSurfaceSampler }, { RoundedBoxGeometry }, { AsciiEffect }]) => {
-
-      const mobileMediaQuery = window.matchMedia('(max-width: 768px)');
-
-      const CONFIG = {
-        modelPath: '/models/face.glb',
-
-        pointColor: 0xc0dceb,
-        pointSize: 0.005,
-
-        wireframeColor: 0xede7d8,
-        wireframeOpacity: 0.3,
-
-        captureSolidColor: 0xc0dceb,
-        captureSolidRoughness: 0.45,
-        captureSolidMetalness: 0.1,
-
-        voxelSize: 0.03,
-        voxelColor: 0x3bb0ff,
-        voxelSampleCount: 150000,
-        voxelRoughness: 0.4,
-        voxelMetalness: 0.1,
-        voxelCornerRadius: 0.2,
-        voxelSegments: 2,
-
-        asciiCharacters: ' .,:;i!lI1?][}{|/\\tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
-        asciiColor: '#c8ffd8',
-        asciiBackground: 'transparent',
-        asciiResolution: 0.15,
-        asciiOffsetX: '-2.35%',
-        asciiScaleX: 0.94,
-
-        ambientLightColor: 0xffffff,
-        ambientLightIntensity: 1,
-        directionalLightColor: 0xffffff,
-        directionalLightIntensity: 1.8,
-
-        modelOffsetX: 0,
-        modelOffsetY: -0.01,
-        modelOffsetZ: 0,
-
-        baseRotationY: Math.PI - 0.1,
-        baseRotationX: 0,
-        mouseRotationStrength: 0.3,
-
-        rotationSpring: 0.05,
-        rotationDamping: 0.92,
-
-        cameraFovMobile: 65,
-        cameraFovDesktop: 45,
-        cameraNear: 0.1,
-        cameraFar: 100,
-        cameraDistanceMultiplier: 2.5,
-        renderAreaScaleY: 1.45,
-      };
-
-      const canvas = document.querySelector('#face');
-      const container = document.querySelector('#heroFace');
-
-      const scene = new THREE.Scene();
-
-      const ambientLight = new THREE.AmbientLight(
-        CONFIG.ambientLightColor, CONFIG.ambientLightIntensity
-      );
-      scene.add(ambientLight);
-
-      const directionalLight = new THREE.DirectionalLight(
-        CONFIG.directionalLightColor, CONFIG.directionalLightIntensity
-      );
-      directionalLight.position.set(0, -2, 4);
-      scene.add(directionalLight);
-
-      const camera = new THREE.PerspectiveCamera(
-        mobileMediaQuery.matches ? CONFIG.cameraFovMobile : CONFIG.cameraFovDesktop,
-        container.clientWidth / container.clientHeight,
-        CONFIG.cameraNear,
-        CONFIG.cameraFar
-      );
-
-      const renderer = new THREE.WebGLRenderer({
-        canvas,
-        alpha: true,
-        antialias: true
-      });
-
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setClearColor(0x000000, 0);
-
-      const asciiEffect = new AsciiEffect(renderer, CONFIG.asciiCharacters, {
-        invert: false,
-        resolution: CONFIG.asciiResolution
-      });
-      asciiEffect.domElement.id = 'asciiFace';
-      asciiEffect.domElement.style.color = CONFIG.asciiColor;
-      asciiEffect.domElement.style.backgroundColor = CONFIG.asciiBackground;
-      asciiEffect.domElement.style.display = 'none';
-      asciiEffect.domElement.style.setProperty('--ascii-offset-x', CONFIG.asciiOffsetX);
-      asciiEffect.domElement.style.setProperty('--ascii-scale-x', CONFIG.asciiScaleX);
-      container.appendChild(asciiEffect.domElement);
-
-      function resizeFaceRenderer() {
-        const renderWidth = container.clientWidth;
-        const renderHeight = container.clientHeight * CONFIG.renderAreaScaleY;
-
-        camera.aspect = renderWidth / renderHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(renderWidth, renderHeight, false);
-        asciiEffect.setSize(renderWidth, renderHeight);
-
-        canvas.style.width = '100%';
-        canvas.style.height = `${CONFIG.renderAreaScaleY * 100}%`;
-        asciiEffect.domElement.style.width = '100%';
-        asciiEffect.domElement.style.height = `${CONFIG.renderAreaScaleY * 100}%`;
-      }
-
-      resizeFaceRenderer();
-
-      let group;
-      let pointsWireGroup;
-      let solidGroup;
-      let voxelGroup;
-      let asciiGroup;
-      let activeFaceStyle = 'default';
-
-      let mx = 0;
-      let my = 0;
-
-      let rotVX = 0;
-      let rotVY = 0;
-      let lastFaceTimestamp = 0;
-
-      function buildVoxelMesh(mesh, voxelSize, color, sampleCount, cornerRadius, segments) {
-        const sampler = new MeshSurfaceSampler(mesh).build();
-        const tempPosition = new THREE.Vector3();
-
-        const voxelMap = new Map();
-
-        for (let i = 0; i < sampleCount; i++) {
-          sampler.sample(tempPosition);
-
-          const vx = Math.round(tempPosition.x / voxelSize);
-          const vy = Math.round(tempPosition.y / voxelSize);
-          const vz = Math.round(tempPosition.z / voxelSize);
-
-          const key = `${vx}_${vy}_${vz}`;
-          if (!voxelMap.has(key)) {
-            voxelMap.set(key, [vx * voxelSize, vy * voxelSize, vz * voxelSize]);
-          }
-        }
-
-        const boxGeometry = new RoundedBoxGeometry(
-          voxelSize, voxelSize, voxelSize,
-          segments,
-          voxelSize * cornerRadius
-        );
-
-        const boxMaterial = new THREE.MeshStandardMaterial({
-          color,
-          roughness: CONFIG.voxelRoughness,
-          metalness: CONFIG.voxelMetalness,
-        });
-
-        const instancedMesh = new THREE.InstancedMesh(
-          boxGeometry, boxMaterial, voxelMap.size
-        );
-
-        const dummy = new THREE.Object3D();
-        let i = 0;
-        voxelMap.forEach(([x, y, z]) => {
-          dummy.position.set(x, y, z);
-          dummy.updateMatrix();
-          instancedMesh.setMatrixAt(i, dummy.matrix);
-          i++;
-        });
-
-        instancedMesh.instanceMatrix.needsUpdate = true;
-        return instancedMesh;
-      }
-
-      function setActiveStyle(styleName) {
-        activeFaceStyle = styleName;
-        canvas.style.display = 'block';
-        canvas.style.opacity = styleName === 'code' ? '0.36' : '1';
-        asciiEffect.domElement.style.display = styleName === 'code' ? 'block' : 'none';
-
-        if (!pointsWireGroup || !solidGroup || !voxelGroup || !asciiGroup) return;
-
-        if (styleName === 'create') {
-          pointsWireGroup.visible = false;
-          solidGroup.visible = false;
-          voxelGroup.visible = true;
-          asciiGroup.visible = false;
-        } else if (styleName === 'capture') {
-          pointsWireGroup.visible = false;
-          solidGroup.visible = true;
-          voxelGroup.visible = false;
-          asciiGroup.visible = false;
-        } else if (styleName === 'code') {
-          pointsWireGroup.visible = false;
-          solidGroup.visible = false;
-          voxelGroup.visible = false;
-          asciiGroup.visible = true;
-        } else {
-          pointsWireGroup.visible = true;
-          solidGroup.visible = false;
-          voxelGroup.visible = false;
-          asciiGroup.visible = false;
-        }
-      }
-
-      window.setFaceStyle = setActiveStyle;
-
-      document.querySelector('.card1').addEventListener('click', (e) => {
-        triggerThemeTransition(e.clientX, e.clientY, 'capture');
-      });
-      document.querySelector('.card2').addEventListener('click', (e) => {
-        triggerThemeTransition(e.clientX, e.clientY, 'create');
-      });
-      document.querySelector('.card3').addEventListener('click', (e) => {
-        triggerThemeTransition(e.clientX, e.clientY, 'code');
-      });
-
-      const loader = new GLTFLoader();
-
-      loader.load(CONFIG.modelPath, (gltf) => {
-
-        let mesh = null;
-        gltf.scene.traverse(c => {
-          if (c.isMesh && !mesh) mesh = c;
-        });
-
-        const geometry = mesh.geometry;
-        geometry.computeBoundingSphere();
-
-        const { center, radius } = geometry.boundingSphere;
-
-        geometry.translate(-center.x, -center.y, -center.z);
-
-        group = new THREE.Group();
-
-        pointsWireGroup = new THREE.Group();
-
-        const points = new THREE.Points(
-          geometry,
-          new THREE.PointsMaterial({
-            size: radius * CONFIG.pointSize,
-            color: CONFIG.pointColor,
-            sizeAttenuation: true,
-          })
-        );
-
-        const wire = new THREE.LineSegments(
-          new THREE.WireframeGeometry(geometry),
-          new THREE.LineBasicMaterial({
-            color: CONFIG.wireframeColor,
-            transparent: true,
-            opacity: CONFIG.wireframeOpacity,
-          })
-        );
-
-        pointsWireGroup.add(points);
-        pointsWireGroup.add(wire);
-
-        solidGroup = new THREE.Group();
-        const solidMesh = new THREE.Mesh(
-          geometry,
-          new THREE.MeshStandardMaterial({
-            color: CONFIG.captureSolidColor,
-            roughness: CONFIG.captureSolidRoughness,
-            metalness: CONFIG.captureSolidMetalness,
-          })
-        );
-        solidGroup.add(solidMesh);
-        solidGroup.visible = false;
-
-        voxelGroup = new THREE.Group();
-        const voxelMesh = buildVoxelMesh(
-          mesh,
-          radius * CONFIG.voxelSize,
-          CONFIG.voxelColor,
-          CONFIG.voxelSampleCount,
-          CONFIG.voxelCornerRadius,
-          CONFIG.voxelSegments
-        );
-        voxelGroup.add(voxelMesh);
-        voxelGroup.visible = false;
-
-        asciiGroup = new THREE.Group();
-        const asciiMesh = new THREE.Mesh(
-          geometry,
-          new THREE.MeshBasicMaterial({
-            color: 0xffffff,
-            side: THREE.DoubleSide,
-          })
-        );
-        const asciiShadow = new THREE.Mesh(
-          geometry,
-          new THREE.MeshBasicMaterial({
-            color: 0x707070,
-            side: THREE.BackSide,
-          })
-        );
-        const asciiWire = new THREE.LineSegments(
-          new THREE.WireframeGeometry(geometry),
-          new THREE.LineBasicMaterial({
-            color: 0x8f8f8f,
-            transparent: true,
-            opacity: 0.45,
-          })
-        );
-        asciiGroup.add(asciiShadow);
-        asciiGroup.add(asciiMesh);
-        asciiGroup.add(asciiWire);
-        asciiGroup.visible = false;
-
-        group.add(pointsWireGroup);
-        group.add(solidGroup);
-        group.add(voxelGroup);
-        group.add(asciiGroup);
-
-        group.position.set(
-          CONFIG.modelOffsetX,
-          CONFIG.modelOffsetY,
-          CONFIG.modelOffsetZ
-        );
-
-        group.rotation.y = CONFIG.baseRotationY;
-
-        scene.add(group);
-
-        camera.position.z = radius * CONFIG.cameraDistanceMultiplier;
-        setActiveStyle(activeFaceStyle);
-      });
-
-      function animateFace(timestamp) {
-        const frameFactor = getFrameFactor(timestamp, lastFaceTimestamp);
-        lastFaceTimestamp = timestamp;
-
-        requestAnimationFrame(animateFace);
-
-        const sx = window.springX || 0;
-        const sy = window.springY || 0;
-
-        const rect = container.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-
-        mx = (sx - cx) / (rect.width / 2);
-        my = (sy - cy) / (rect.height / 2);
-
-        if (group) {
-
-          const targetY = CONFIG.baseRotationY + mx * CONFIG.mouseRotationStrength;
-          const targetX = CONFIG.baseRotationX + my * CONFIG.mouseRotationStrength;
-
-          rotVX += (targetY - group.rotation.y) * CONFIG.rotationSpring * frameFactor;
-          rotVY += (targetX - group.rotation.x) * CONFIG.rotationSpring * frameFactor;
-
-          const rotationDamping = Math.pow(CONFIG.rotationDamping, frameFactor);
-          rotVX *= rotationDamping;
-          rotVY *= rotationDamping;
-
-          group.rotation.y += rotVX * frameFactor;
-          group.rotation.x += rotVY * frameFactor;
-        }
-
-        if (activeFaceStyle === 'code') {
-          asciiEffect.render(scene, camera);
-
-          if (pointsWireGroup && solidGroup && voxelGroup && asciiGroup) {
-            pointsWireGroup.visible = true;
-            solidGroup.visible = false;
-            voxelGroup.visible = false;
-            asciiGroup.visible = false;
-            renderer.render(scene, camera);
-            pointsWireGroup.visible = false;
-            solidGroup.visible = false;
-            asciiGroup.visible = true;
-          }
-        } else {
-          renderer.render(scene, camera);
-        }
-      }
-
-      requestAnimationFrame(animateFace);
-
-      window.addEventListener('resize', () => {
-        resizeFaceRenderer();
-      });
-
-    });
-  });
-
-
-  // =========================
-  // CARDS
-  // =========================
-
-  const cards = document.querySelectorAll(".cards > div");
-
-  const maxColorDistance = 200;
-
-  const maxTiltDegree = 5;
-  const maxGlareOpacity = 0.2;
-  const outsideThreshold = 200;
-
-  function clamp(v, min, max) {
-    return Math.min(Math.max(v, min), max);
+  // ---- READ (all layout reads first) ----
+  readCards();
+  readContact();
+  readFace();
+
+  // ---- UPDATE ----
+  const cursorSettled = isTouch ? true : updateCursor(f);
+  const faceSettled = face.update(f);
+
+  // ---- WRITE ----
+  if (!isTouch) writeCursor();
+  writeCards();
+  if (!isTouch) writeContact();
+  face.render();
+
+  const busy = !cursorSettled || !faceSettled || face.needsRender || state.dirty;
+  state.dirty = false;
+
+  // keep running while something is moving, otherwise go idle until
+  // the next mousemove / scroll / resize / theme change
+  if (busy) {
+    rafId = requestAnimationFrame(frame);
   }
+}
 
-  function distanceToRect(px, py, rect) {
-    const dx = Math.max(rect.left - px, 0, px - rect.right);
-    const dy = Math.max(rect.top - py, 0, py - rect.bottom);
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
-  function animateCards() {
-
-    const x = window.springX || 0;
-    const y = window.springY || 0;
-
-    cards.forEach(card => {
-
-      const glare = card.querySelector(".glare");
-      const rect = card.getBoundingClientRect();
-
-      const hw = rect.width / 2;
-      const hh = rect.height / 2;
-
-      const cx = rect.left + hw;
-      const cy = rect.top + hh;
-
-      const dx = x - cx;
-      const dy = y - cy;
-
-      const rx = clamp(dy / hh, -1, 1);
-      const ry = clamp(dx / hw, -1, 1);
-
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const norm = clamp(dist / Math.max(hw, hh), 0, 1);
-
-      const outside = distanceToRect(x, y, rect);
-      const intensity = 1 - clamp(outside / outsideThreshold, 0, 1);
-
-      const colorAmount = 1 - clamp(outside / maxColorDistance, 0, 1);
-
-        if (
-        !document.body.classList.contains("theme-capture") &&
-        !document.body.classList.contains("theme-create") &&
-        !document.body.classList.contains("theme-code")
-        ) {
-        card.style.filter = `grayscale(${1 - colorAmount})`;
-        } else {
-        card.style.filter = "grayscale(0)";
-        }
-
-      const degree = norm * maxTiltDegree * intensity;
-
-      card.style.transform =
-        `perspective(400px) rotate3d(${-rx}, ${ry}, 0, ${degree}deg)`;
-
-      glare.style.transform =
-        `translate(${-ry * 100}%, ${-rx * 100}%) scale(5)`;
-
-      glare.style.opacity =
-        norm * 0.2 * intensity;
-    });
-
-    requestAnimationFrame(animateCards);
-  }
-
-  animateCards();
-
-});
-
-
-// footer
-
-const contactElement = document.getElementById("contact");
-
-// --- Your Configuration Variables ---
-const smallestSize = 1.0;     // The default scale (e.g., 1 = 100%)
-const biggestSize = 1.1;      // The maximum scale when cursor is on/inside the element
-const effectDistance = 250;   // Distance in pixels from the edge where the scaling begins
-
-document.addEventListener("mousemove", (e) => {
-  // Get the current position and dimensions of the element
-  const rect = contactElement.getBoundingClientRect();
-  
-  const mouseX = e.clientX;
-  const mouseY = e.clientY;
-
-  // Calculate distance from mouse to the bounding box (edges) of the element.
-  // If the mouse is inside the element, both dx and dy evaluate to 0.
-  const dx = Math.max(0, rect.left - mouseX, mouseX - rect.right);
-  const dy = Math.max(0, rect.top - mouseY, mouseY - rect.bottom);
-  
-  // Pythagorean theorem to get the actual straight-line distance
-  const distance = Math.sqrt(dx * dx + dy * dy);
-
-  // Calculate the new scale
-  let newScale = smallestSize;
-
-  if (distance < effectDistance) {
-    // Calculate how close the mouse is as a percentage (0 to 1)
-    // 1 = touching/inside the element, 0 = at the outer edge of the effectDistance
-    const progress = 1 - (distance / effectDistance);
-    
-    // Map the progress to the scale range
-    newScale = smallestSize + ((biggestSize - smallestSize) * progress);
-  }
-
-  // Apply the scale to the element
-  contactElement.style.transform = `scale(${newScale})`;
-});
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// gallery
+wake();

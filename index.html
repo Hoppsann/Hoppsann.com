@@ -4,9 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Heisann og Hoppsann!</title>
+    <meta name="description" content="Hoppsann — photography, 3D and code by Even Bjerke Pettersen.">
+    <meta name="theme-color" content="#000000">
+
+    <link rel="icon" type="image/png" href="/img/favicon.png">
+
+    <!-- start fetching the heavy stuff as early as possible -->
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preload" href="/fonts/Geom-VariableFont_wght.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="modulepreload" href="https://unpkg.com/three@0.184.0/build/three.module.js">
+
     <link rel="stylesheet" href="/css/main.css">
     <link rel="stylesheet" href="/css/gallery.css">
-    <link rel="icon" type="image/x-icon" href="/img/favicon.png">
 
     <script type="importmap">
     {
@@ -16,7 +25,7 @@
       }
     }
     </script>
-    <script type="module" src="./js/script.js"></script>
+    <script type="module" src="/js/script.js"></script>
     <script src="/js/gallery.js" defer></script>
 </head>
 <body>
@@ -31,33 +40,32 @@
             </div>
         </div>
 
-        <h1>
-            Heisann og Hoppsann
-        </h1>
+        <h1>Heisann og Hoppsann</h1>
+
         <div class="intro-sawtooth-wrapper">
             <div class="intro-sawtooth-shape"></div>
         </div>
     </section>
 
     <div class="cards">
-        <div class="card1" id="card">
+        <div class="card card1" role="button" tabindex="0" aria-label="Capture — show photo gallery">
             <div class="glare"></div>
             <div class="card-content">
-                <img src="/img/capture-card.png" alt="">
+                <img src="/img/capture-card.webp" alt="Capture" width="720" height="1280" decoding="async" fetchpriority="high">
             </div>
         </div>
 
-        <div class="card2" id="card">
+        <div class="card card2" role="button" tabindex="0" aria-label="Create">
             <div class="glare"></div>
             <div class="card-content">
                 <h2>Create</h2>
             </div>
         </div>
 
-        <div class="card3" id="card">
+        <div class="card card3" role="button" tabindex="0" aria-label="Code">
             <div class="glare"></div>
             <div class="card-content">
-                <img src="img/code-card.png" alt="">
+                <img src="/img/code-card.webp" alt="Code" width="720" height="1280" decoding="async">
             </div>
         </div>
     </div>
@@ -68,13 +76,13 @@
         </div>
     </div>
 
-    <div id="lightbox" class="lightbox">
-        <button class="lightbox-icon-btn lightbox-close-btn" id="lightbox-close">×</button>
-        <button class="lightbox-icon-btn lightbox-nav-btn lightbox-prev" id="lightbox-prev">‹</button>
+    <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer">
+        <button class="lightbox-icon-btn lightbox-close-btn" id="lightbox-close" aria-label="Close">×</button>
+        <button class="lightbox-icon-btn lightbox-nav-btn lightbox-prev" id="lightbox-prev" aria-label="Previous photo">‹</button>
         <div id="lightbox-img-wrap" class="lightbox-img-wrap">
-            <img id="lightbox-img" src="" alt="">
+            <img id="lightbox-img" alt="">
         </div>
-        <button class="lightbox-icon-btn lightbox-nav-btn lightbox-next" id="lightbox-next">›</button>
+        <button class="lightbox-icon-btn lightbox-nav-btn lightbox-next" id="lightbox-next" aria-label="Next photo">›</button>
         <div id="lightbox-counter" class="lightbox-counter"></div>
     </div>
 
