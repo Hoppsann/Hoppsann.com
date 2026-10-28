@@ -88,49 +88,50 @@ body.theme-code {
 }
 
 /* =========================================
-   THEME TRANSITION (circle reveal)
+   THEME TRANSITION (live circle reveal)
+
+   While html.revealing is set, every coloured surface paints the new
+   colour inside a circle and the old colour outside it. script.js sets
+   --rx / --ry (circle centre relative to the element) and --reveal-r on
+   each surface every frame. Nothing is a snapshot, so the page stays live.
    ========================================= */
 
-::view-transition-old(root),
-::view-transition-new(root) {
-    animation: none;
-    mix-blend-mode: normal;
+@property --reveal-r {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
 }
 
-::view-transition-old(root) {
-    z-index: 1;
+@property --rx {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
 }
 
-::view-transition-new(root) {
-    z-index: 2;
-    clip-path: circle(0px at var(--transition-x, 50%) var(--transition-y, 50%));
-    animation: circle-reveal 0.7s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+@property --ry {
+    syntax: "<length>";
+    inherits: false;
+    initial-value: 0px;
 }
 
-@keyframes circle-reveal {
-    to {
-        clip-path: circle(var(--transition-radius, 150%) at var(--transition-x, 50%) var(--transition-y, 50%));
-    }
+html.revealing body,
+html.revealing .intro-sawtooth-shape,
+html.revealing .footer-sawtooth-shape {
+    background: radial-gradient(
+        circle at var(--rx) var(--ry),
+        var(--page-background-color) var(--reveal-r),
+        var(--old-page) calc(var(--reveal-r) + 1px)
+    );
 }
 
-/* The custom cursor gets its own layer above the reveal, so it keeps
-   following the mouse instead of being baked into the old/new snapshots. */
-#cursor {
-    view-transition-name: hoppsann-cursor;
-}
-
-::view-transition-group(hoppsann-cursor) {
-    animation: none;
-    z-index: 10;
-    mix-blend-mode: difference;
-}
-
-::view-transition-old(hoppsann-cursor) {
-    display: none;
-}
-
-::view-transition-new(hoppsann-cursor) {
-    animation: none;
+html.revealing .intro,
+html.revealing footer,
+html.revealing .project-card {
+    background: radial-gradient(
+        circle at var(--rx) var(--ry),
+        var(--accent-color) var(--reveal-r),
+        var(--old-accent) calc(var(--reveal-r) + 1px)
+    );
 }
 
 /* =========================================
@@ -527,10 +528,5 @@ footer a:hover {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
-    }
-
-    ::view-transition-old(root),
-    ::view-transition-new(root) {
-        animation: none !important;
     }
 }

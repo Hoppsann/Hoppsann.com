@@ -275,19 +275,101 @@ function writeContact() {
 // THEME TRANSITION (circle reveal via View Transitions API)
 // ---------------------------------------------------------
 
-// The circle only has to reveal a recolour, so everything heavy (opening
-// the gallery / projects, building DOM, compiling shaders) is kept out of
-// the 0.7 s it runs. Other scripts listen for 'hoppsann:theme' and wait
-// for `finished` before they change the layout.
+// Circle reveal between themes. Everything stays live: inside the circle
+// the page already has the new theme, outside it still has the old one.
+// Coloured surfaces paint both colours with a radial gradient whose radius
+// grows every frame, and the 3D face draws both styles masked by the same
+// circle. Other scripts listen for 'hoppsann:theme' and wait for
+// `finished` before they change the layout (open the gallery etc.).
+
+const REVEAL_DURATION = 700;
+const REVEAL_SURFACES = 'body, .intro, footer, .intro-sawtooth-shape, .footer-sawtooth-shape, .project-card';
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 let currentTheme = null;
-let currentTransition = null;
+let reveal = null;
 
 function applyTheme(themeName) {
   document.body.classList.remove('theme-capture', 'theme-create', 'theme-code');
   document.body.classList.add(`theme-${themeName}`);
   state.themed = true;
-  face.setStyle(themeName);
+  markDirty();
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function startReveal(clickX, clickY, themeName) {
+  const html = document.documentElement;
+  const bodyStyle = getComputedStyle(document.body);
+
+  // remember the old colours before the theme class changes
+  html.style.setProperty('--old-page', bodyStyle.getPropertyValue('--page-background-color').trim());
+  html.style.setProperty('--old-accent', bodyStyle.getPropertyValue('--accent-color').trim());
+
+  const maxX = Math.max(clickX, window.innerWidth - clickX);
+  const maxY = Math.max(clickY, window.innerHeight - clickY);
+
+  let resolve;
+  const finished = new Promise(res => { resolve = res; });
+
+  reveal = {
+    x: clickX,
+    y: clickY,
+    radius: Math.sqrt(maxX * maxX + maxY * maxY) + 2,
+    start: performance.now(),
+    surfaces: Array.from(document.querySelectorAll(REVEAL_SURFACES)).map(el => ({ el, rect: null })),
+    resolve,
+  };
+
+  const fromStyle = face.style;
+  applyTheme(themeName);
+  face.beginReveal(fromStyle, themeName);
+  html.classList.add('revealing');
+  markDirty();
+
+  return finished;
+}
+
+function readReveal() {
+  if (!reveal) return;
+  for (const s of reveal.surfaces) s.rect = s.el.getBoundingClientRect();
+}
+
+function writeReveal(now) {
+  if (!reveal) return false;
+
+  const t = Math.min(Math.max((now - reveal.start) / REVEAL_DURATION, 0), 1);
+  const r = reveal.radius * easeInOutCubic(t);
+
+  for (const { el, rect } of reveal.surfaces) {
+    el.style.setProperty('--rx', `${reveal.x - rect.left}px`);
+    el.style.setProperty('--ry', `${reveal.y - rect.top}px`);
+    el.style.setProperty('--reveal-r', `${r}px`);
+  }
+  face.updateReveal(reveal.x, reveal.y, r);
+
+  if (t >= 1) endReveal();
+  return true;
+}
+
+function endReveal() {
+  if (!reveal) return;
+  const { surfaces, resolve } = reveal;
+  reveal = null;
+
+  const html = document.documentElement;
+  html.classList.remove('revealing');
+  html.style.removeProperty('--old-page');
+  html.style.removeProperty('--old-accent');
+  for (const { el } of surfaces) {
+    el.style.removeProperty('--rx');
+    el.style.removeProperty('--ry');
+    el.style.removeProperty('--reveal-r');
+  }
+  face.endReveal();
+  resolve();
   markDirty();
 }
 
@@ -297,29 +379,16 @@ function triggerThemeTransition(clickX, clickY, themeName) {
   if (themeName !== currentTheme) {
     currentTheme = themeName;
 
-    // a second click while the circle is still growing: jump to the end first
-    if (currentTransition) currentTransition.skipTransition();
+    // a second click while the circle is still growing: finish it first
+    endReveal();
 
-    if (!document.startViewTransition) {
-      // fallback for nettlesere uten støtte - bare bytt tema direkte
+    if (reducedMotion.matches) {
+      const fromStyle = face.style;
       applyTheme(themeName);
+      face.beginReveal(fromStyle, themeName);
+      face.endReveal();
     } else {
-      const maxX = Math.max(clickX, window.innerWidth - clickX);
-      const maxY = Math.max(clickY, window.innerHeight - clickY);
-      const radius = Math.sqrt(maxX * maxX + maxY * maxY);
-
-      const root = document.documentElement.style;
-      root.setProperty('--transition-x', `${clickX}px`);
-      root.setProperty('--transition-y', `${clickY}px`);
-      root.setProperty('--transition-radius', `${radius}px`);
-
-      const transition = document.startViewTransition(() => applyTheme(themeName));
-      currentTransition = transition;
-      finished = transition.finished
-        .catch(() => {})
-        .finally(() => {
-          if (currentTransition === transition) currentTransition = null;
-        });
+      finished = startReveal(clickX, clickY, themeName);
     }
   }
 
@@ -419,6 +488,9 @@ const face = {
   container: document.querySelector('#heroFace'),
   rect: null,
   setStyle(name) { this.style = name; },
+  beginReveal(from, to) { this.style = to; },
+  updateReveal() {},
+  endReveal() {},
   update() { return true; },
   render() {},
   resize() {},
@@ -630,6 +702,9 @@ function createAsciiPass(THREE, renderer, CONFIG) {
       drawAtlas(cellW, cellH);
     },
 
+    // the materials that draw onto the canvas (for the circle mask)
+    canvasMaterials: [dimMaterial, glyphMaterial],
+
     // compile everything the ascii pass uses ahead of time
     warmUp(scene, camera) {
       if (renderer.initRenderTarget) {
@@ -653,6 +728,7 @@ function createAsciiPass(THREE, renderer, CONFIG) {
     // the caller sets up which objects are visible for each step
     renderSource(scene, camera) {
       renderer.setRenderTarget(sceneTarget);
+      renderer.clear();
       renderer.render(scene, camera);
       drawQuad(downsampleMaterial, smallTarget);
       renderer.setRenderTarget(null);
@@ -697,6 +773,7 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler }) {
     canvas,
     alpha: true,
     antialias: true,
+    stencil: true, // used to show the new style inside the growing circle
     powerPreference: 'high-performance',
   });
   // phones report 3x or more; rendering at that resolution is a big GPU cost
@@ -844,16 +921,18 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler }) {
     voxelGroup.add(buildVoxelMesh());
   }
 
-  function applyVisibility() {
-    const s = face.style;
+  function showStyle(s) {
     if (!group) return;
     if (s === 'create') ensureVoxels();
-
 
     pointsWireGroup.visible = s === 'default';
     solidGroup.visible = s === 'capture';
     voxelGroup.visible = s === 'create';
     asciiGroup.visible = s === 'code';
+  }
+
+  function applyVisibility() {
+    showStyle(face.style);
   }
 
   // three only compiles shaders for visible objects, so the hidden styles
@@ -873,6 +952,7 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler }) {
     asciiPass.warmUp(scene, camera);
 
     groups.forEach((g, i) => { g.visible = was[i]; });
+    renderer.compile(circleScene, circleCamera);
   }
 
   face.setStyle = (name) => {
@@ -996,14 +1076,12 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler }) {
     );
   };
 
-  face.render = () => {
-    if (!face.needsRender || !face.visible) return;
-    face.needsRender = false;
+  // draws one style. With `masked`, only pixels inside the circle are touched.
+  function renderStyle(style) {
+    showStyle(style);
 
-    if (face.style === 'code' && group) {
+    if (style === 'code' && group) {
       // pass 1: the shaded source image the characters are picked from
-      asciiGroup.visible = true;
-      pointsWireGroup.visible = false;
       asciiPass.renderSource(scene, camera);
       // pass 2: points + wireframe on the canvas (faded in pass 3)
       asciiGroup.visible = false;
@@ -1011,11 +1089,120 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler }) {
       renderer.render(scene, camera);
       // pass 3: the characters on top
       asciiPass.drawCharacters();
-      asciiGroup.visible = true;
-      pointsWireGroup.visible = false;
     } else {
       renderer.render(scene, camera);
     }
+  }
+
+  // ---- circle reveal between two styles, both live ----
+
+  const allMaterials = () => {
+    const list = [...asciiPass.canvasMaterials];
+    scene.traverse(o => {
+      if (o.material) list.push(...(Array.isArray(o.material) ? o.material : [o.material]));
+    });
+    return list;
+  };
+
+  function setStencilTest(on) {
+    for (const m of allMaterials()) {
+      m.stencilWrite = on; // in three this switches the stencil *test* on
+      m.stencilFunc = THREE.EqualStencilFunc;
+      m.stencilRef = 1;
+      m.stencilFail = THREE.KeepStencilOp;
+      m.stencilZFail = THREE.KeepStencilOp;
+      m.stencilZPass = THREE.KeepStencilOp;
+    }
+  }
+
+  // clears the circle to transparent and marks it in the stencil buffer
+  const circleMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uCenter: { value: new THREE.Vector2() },
+      uRadius: { value: 0 },
+    },
+    vertexShader: `void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+    fragmentShader: /* glsl */`
+      uniform vec2 uCenter;
+      uniform float uRadius;
+      void main() {
+        if (distance(gl_FragCoord.xy, uCenter) > uRadius) discard;
+        gl_FragColor = vec4(0.0);
+      }
+    `,
+    blending: THREE.NoBlending,
+    depthTest: false,
+    depthWrite: false,
+    stencilWrite: true,
+    stencilFunc: THREE.AlwaysStencilFunc,
+    stencilRef: 1,
+    stencilZPass: THREE.ReplaceStencilOp,
+  });
+  const circleScene = new THREE.Scene();
+  const circleQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), circleMaterial);
+  circleQuad.frustumCulled = false;
+  circleScene.add(circleQuad);
+  const circleCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+  let reveal = null; // { from, to, x, y, r } in viewport pixels
+
+  face.beginReveal = (from, to) => {
+    reveal = { from, to, x: 0, y: 0, r: 0 };
+    face.style = to;
+    face.needsRender = true;
+  };
+
+  face.updateReveal = (x, y, r) => {
+    if (!reveal) return;
+    reveal.x = x;
+    reveal.y = y;
+    reveal.r = r;
+    face.needsRender = true;
+  };
+
+  face.endReveal = () => {
+    if (!reveal) return;
+    reveal = null;
+    applyVisibility();
+    face.needsRender = true;
+  };
+
+  face.render = () => {
+    if (!face.needsRender || !face.visible) return;
+    face.needsRender = false;
+
+    if (!reveal || !group) {
+      renderStyle(face.style);
+      applyVisibility();
+      return;
+    }
+
+    // 1) the old style everywhere
+    setStencilTest(false);
+    renderStyle(reveal.from);
+
+    // 2) cut the circle out (canvas pixels, origin bottom-left)
+    const rect = canvas.getBoundingClientRect();
+    const scale = canvas.width / rect.width;
+    circleMaterial.uniforms.uCenter.value.set(
+      (reveal.x - rect.left) * scale,
+      (rect.bottom - reveal.y) * scale
+    );
+    circleMaterial.uniforms.uRadius.value = reveal.r * scale;
+
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.setRenderTarget(null);
+    renderer.render(circleScene, circleCamera);
+    renderer.clearDepth();
+
+    // 3) the new style, only inside the circle
+    setStencilTest(true);
+    renderStyle(reveal.to);
+    setStencilTest(false);
+
+    renderer.autoClear = autoClear;
+    applyVisibility();
   };
 
   face.resize = resize;
@@ -1068,6 +1255,7 @@ function frame(timestamp) {
   }
 
   // ---- READ (all layout reads first) ----
+  readReveal();
   readCards();
   readContact();
   readFace();
@@ -1077,17 +1265,18 @@ function frame(timestamp) {
   const faceSettled = face.update(f);
 
   // ---- WRITE ----
+  const revealing = writeReveal(timestamp);
   if (!isTouch) writeCursor();
   writeCards();
   if (!isTouch) writeContact();
   face.render();
 
-  const busy = !cursorSettled || !faceSettled || face.needsRender || state.dirty;
+  const busy = revealing || !cursorSettled || !faceSettled || face.needsRender || state.dirty;
   state.dirty = false;
 
   // keep running while something is moving, otherwise go idle until
   // the next mousemove / scroll / resize / theme change
-  if (busy) {
+  if (busy && !rafId) {
     rafId = requestAnimationFrame(frame);
   }
 }
