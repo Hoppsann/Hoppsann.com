@@ -16,6 +16,7 @@
 
     <link rel="stylesheet" href="/css/main.css">
     <link rel="stylesheet" href="/css/gallery.css">
+    <link rel="stylesheet" href="/css/projects.css">
 
     <script type="importmap">
     {
@@ -27,6 +28,7 @@
     </script>
     <script type="module" src="/js/script.js"></script>
     <script src="/js/gallery.js" defer></script>
+    <script src="/js/projects.js" defer></script>
 </head>
 <body>
 
@@ -75,6 +77,18 @@
             <div id="gallery-grid" class="gallery-grid"></div>
         </div>
     </div>
+
+    <section id="projects-section" class="projects-section" aria-label="Code projects">
+        <div class="projects-inner">
+            <div class="projects-header">
+                <h2 class="projects-title">&lt;projects /&gt;</h2>
+                <a class="projects-count-link" href="https://github.com/Hoppsann?tab=repositories" target="_blank" rel="noopener noreferrer">
+                    <span id="projects-count">GitHub</span> ↗
+                </a>
+            </div>
+            <div id="projects-grid" class="projects-grid"></div>
+        </div>
+    </section>
 
     <div id="lightbox" class="lightbox" role="dialog" aria-modal="true" aria-label="Photo viewer">
         <button class="lightbox-icon-btn lightbox-close-btn" id="lightbox-close" aria-label="Close">×</button>

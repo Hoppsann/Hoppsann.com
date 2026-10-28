@@ -1,0 +1,75 @@
+{
+  "_comment": "Fallback list, only used if the GitHub API can't be reached. The site normally loads the live list from api.github.com.",
+  "repos": [
+    {
+      "name": "Hoppsann.com",
+      "html_url": "https://github.com/Hoppsann/Hoppsann.com",
+      "description": null,
+      "language": "JavaScript",
+      "homepage": "https://hoppsann.com",
+      "pushed_at": "2026-10-28T17:07:58Z",
+      "fork": false,
+      "archived": false
+    },
+    {
+      "name": "interactive-story",
+      "html_url": "https://github.com/Hoppsann/interactive-story",
+      "description": "The Earth is BURNING",
+      "language": "JavaScript",
+      "homepage": "https://interactive-story-sand.vercel.app",
+      "pushed_at": "2026-10-09T15:19:23Z",
+      "fork": false,
+      "archived": false
+    },
+    {
+      "name": "DenUsynligeSekken",
+      "html_url": "https://github.com/Hoppsann/DenUsynligeSekken",
+      "description": "Tverrfaglig prosjekt",
+      "language": "JavaScript",
+      "homepage": null,
+      "pushed_at": "2026-10-05T20:46:18Z",
+      "fork": false,
+      "archived": false
+    },
+    {
+      "name": "Sweet-cookie",
+      "html_url": "https://github.com/Hoppsann/Sweet-cookie",
+      "description": null,
+      "language": "CSS",
+      "homepage": "https://hoppsann.github.io/Sweet-cookie/",
+      "pushed_at": "2026-09-04T06:44:07Z",
+      "fork": false,
+      "archived": false
+    },
+    {
+      "name": "funnet.no",
+      "html_url": "https://github.com/Hoppsann/funnet.no",
+      "description": "finn.no men det er allerede funnet",
+      "language": null,
+      "homepage": null,
+      "pushed_at": "2026-04-24T09:12:21Z",
+      "fork": false,
+      "archived": false
+    },
+    {
+      "name": "Bleikerquizzen",
+      "html_url": "https://github.com/Hoppsann/Bleikerquizzen",
+      "description": "Hva kan du om bleiker?",
+      "language": "HTML",
+      "homepage": null,
+      "pushed_at": "2026-03-27T14:33:03Z",
+      "fork": false,
+      "archived": false
+    },
+    {
+      "name": "burgersjappa",
+      "html_url": "https://github.com/Hoppsann/burgersjappa",
+      "description": null,
+      "language": "HTML",
+      "homepage": null,
+      "pushed_at": "2025-11-07T12:32:35Z",
+      "fork": false,
+      "archived": false
+    }
+  ]
+}
