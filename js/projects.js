@@ -16,6 +16,25 @@
   const SHOW_FORKS = false;
   const SHOW_ARCHIVED = true;
 
+  // Live sites that aren't public repos. Shown first, in this order.
+  // Optional fields: description, language, github (repo URL).
+  const EXTRA_PROJECTS = [
+    {
+      name: 'Imposter',
+      url: 'https://imposter.hoppsann.com',
+    },
+    {
+      name: 'Neste',
+      url: 'https://transport.hoppsann.com',
+      description: 'Trip planner and live overview of the buses around you, with data from Entur.',
+    },
+  ];
+
+  // Use these live-site links instead of the "Website" set on GitHub
+  const HOMEPAGE_OVERRIDES = {
+    'interactive-story': 'https://interactive-story.hoppsann.com',
+  };
+
   // GitHub's own language colours for the little dot
   const LANGUAGE_COLORS = {
     JavaScript: '#f1e05a',
@@ -122,6 +141,41 @@
 
   // ---- grid ----
 
+  function hostname(url) {
+    try { return new URL(url).hostname; } catch (e) { return url; }
+  }
+
+  // card for a live site that isn't a public repo
+  function buildExtraCard(project) {
+    const card = el('article', 'project-card is-site');
+
+    const head = el('div', 'project-head');
+    head.appendChild(link(project.url, 'project-name', project.name, `Open ${project.name}`));
+    card.appendChild(head);
+
+    if (project.description) card.appendChild(el('p', 'project-desc', project.description));
+
+    const meta = el('div', 'project-meta');
+    if (project.language) {
+      const lang = el('span', 'project-lang');
+      const dot = el('span', 'project-lang-dot');
+      dot.style.background = LANGUAGE_COLORS[project.language] || 'currentColor';
+      lang.append(dot, document.createTextNode(project.language));
+      meta.appendChild(lang);
+    }
+    meta.appendChild(el('span', 'project-domain', hostname(project.url)));
+    card.appendChild(meta);
+
+    const links = el('div', 'project-links');
+    if (project.github) {
+      links.appendChild(link(project.github, 'project-link', 'GitHub ↗', `Open ${project.name} on GitHub`));
+    }
+    links.appendChild(link(project.url, 'project-link is-live', 'Live site ↗', `Open ${project.name} live site`));
+    card.appendChild(links);
+
+    return card;
+  }
+
   function buildCard(repo) {
     const card = el('article', 'project-card');
 
@@ -150,7 +204,7 @@
 
     const links = el('div', 'project-links');
     links.appendChild(link(repo.html_url, 'project-link', 'GitHub ↗', `Open ${repo.name} on GitHub`));
-    const live = normalizeUrl(repo.homepage);
+    const live = normalizeUrl(HOMEPAGE_OVERRIDES[repo.name] || repo.homepage);
     if (live) links.appendChild(link(live, 'project-link is-live', 'Live site ↗', `Open ${repo.name} live site`));
     card.appendChild(links);
 
@@ -164,11 +218,18 @@
 
     const grid = $('projects-grid');
     const fragment = document.createDocumentFragment();
+    EXTRA_PROJECTS.forEach(project => fragment.appendChild(buildExtraCard(project)));
     visible.forEach(repo => fragment.appendChild(buildCard(repo)));
     grid.replaceChildren(fragment);
 
     $('projects-count').textContent = `${visible.length} public repos`;
     built = true;
+  }
+
+  function showExtrasOnly() {
+    const fragment = document.createDocumentFragment();
+    EXTRA_PROJECTS.forEach(project => fragment.appendChild(buildExtraCard(project)));
+    $('projects-grid').replaceChildren(fragment);
   }
 
   // ---- open / close ----
@@ -183,7 +244,9 @@
     try {
       buildGrid(await loadRepos());
     } catch (e) {
-      grid.replaceChildren(el('p', 'projects-loading', `Couldn't load projects: ${e.message}`));
+      // the live sites don't need GitHub, so show those anyway
+      showExtrasOnly();
+      grid.appendChild(el('p', 'projects-loading', `Couldn't load GitHub repos: ${e.message}`));
       console.error('[projects]', e);
     }
   }
