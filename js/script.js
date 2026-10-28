@@ -125,16 +125,22 @@ function writeCursor() {
     `rotate(${cursor.angle}deg) scale(${sx}, ${sy})`;
 }
 
-if (!isTouch) {
-  window.addEventListener('mousemove', (e) => {
-    state.mouseX = e.clientX;
-    state.mouseY = e.clientY;
-    markDirty();
-  }, { passive: true });
+// Pointer events cover mouse, touch and pen. On a phone there is no
+// hover, so the face (and cards) follow the last place you tapped/dragged.
+function setPointer(e) {
+  state.mouseX = e.clientX;
+  state.mouseY = e.clientY;
+  markDirty();
+}
 
-  window.addEventListener('mousedown', () => { state.isDown = true; markDirty(); });
-  window.addEventListener('mouseup', () => { state.isDown = false; markDirty(); });
-} else {
+window.addEventListener('pointermove', setPointer, { passive: true });
+window.addEventListener('pointerdown', (e) => {
+  setPointer(e);
+  if (e.pointerType === 'mouse') state.isDown = true;
+}, { passive: true });
+window.addEventListener('pointerup', () => { state.isDown = false; markDirty(); }, { passive: true });
+
+if (isTouch) {
   cursorEl.style.display = 'none';
 }
 
@@ -344,8 +350,7 @@ const FACE_CONFIG = {
   voxelSampleCount: 150000,
   voxelRoughness: 0.4,
   voxelMetalness: 0.1,
-  voxelCornerRadius: 0.2,
-  voxelSegments: 2,
+  voxelCornerRadius: 0.2,   // 0 = sharp cubes, 0.5 = fully round
 
   asciiCharacters: ' .,:;i!lI1?][}{|/\\tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$',
   asciiColor: '#c8ffd8',
@@ -398,7 +403,7 @@ function readFace() {
   if (face.ready && face.visible) face.rect = face.container.getBoundingClientRect();
 }
 
-function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, RoundedBoxGeometry, AsciiEffect }) {
+function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, AsciiEffect }) {
   const CONFIG = FACE_CONFIG;
   const canvas = document.querySelector('#face');
   const container = face.container;
@@ -472,39 +477,95 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, RoundedB
   let rotVX = 0;
   let rotVY = 0;
 
+  // Voxels are plain 12-triangle boxes. The rounded edges are faked in the
+  // fragment shader by bending the normal near each edge the same way a real
+  // rounded box would. That is ~25x fewer triangles than RoundedBoxGeometry
+  // and looks the same at this size.
+  function createVoxelMaterial(voxelSize) {
+    const material = new THREE.MeshStandardMaterial({
+      color: CONFIG.voxelColor,
+      roughness: CONFIG.voxelRoughness,
+      metalness: CONFIG.voxelMetalness,
+    });
+
+    const inner = 0.5 - CONFIG.voxelCornerRadius;
+
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uVoxelSize = { value: voxelSize };
+      shader.uniforms.uVoxelInner = { value: inner };
+
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>
+          uniform float uVoxelSize;
+          varying vec3 vVoxelLocal;
+          varying vec3 vVoxelAxisX;
+          varying vec3 vVoxelAxisY;
+          varying vec3 vVoxelAxisZ;`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          vVoxelLocal = position / uVoxelSize;
+          vVoxelAxisX = normalMatrix * vec3(1.0, 0.0, 0.0);
+          vVoxelAxisY = normalMatrix * vec3(0.0, 1.0, 0.0);
+          vVoxelAxisZ = normalMatrix * vec3(0.0, 0.0, 1.0);`);
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>
+          uniform float uVoxelInner;
+          varying vec3 vVoxelLocal;
+          varying vec3 vVoxelAxisX;
+          varying vec3 vVoxelAxisY;
+          varying vec3 vVoxelAxisZ;`)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+          {
+            // bend the normal towards the cube's edges like a rounded box:
+            // flat in the middle, turning up to ~90 degrees at the edge
+            vec3 lp = vVoxelLocal;
+            vec3 alp = abs(lp);
+            float r = 0.5 - uVoxelInner;
+            vec3 edge = min(abs(lp - clamp(lp, -uVoxelInner, uVoxelInner)) / r, 0.97);
+            vec3 ln = sign(lp) * tan(edge * 1.5707963);
+            if (alp.x >= alp.y && alp.x >= alp.z) ln.x = sign(lp.x);
+            else if (alp.y >= alp.z) ln.y = sign(lp.y);
+            else ln.z = sign(lp.z);
+            ln = normalize(ln);
+            normal = normalize(vVoxelAxisX * ln.x + vVoxelAxisY * ln.y + vVoxelAxisZ * ln.z);
+          }`);
+    };
+    material.customProgramCacheKey = () => 'rounded-voxel';
+    return material;
+  }
+
   function buildVoxelMesh() {
     const voxelSize = modelRadius * CONFIG.voxelSize;
     const sampler = new MeshSurfaceSampler(sourceMesh).build();
     const p = new THREE.Vector3();
 
     // numeric keys are much faster than string keys
-    const seen = new Set();
-    const positions = [];
     const OFFSET = 1024;
     const SPAN = 2048;
+    const keyOf = (x, y, z) => ((x + OFFSET) * SPAN + (y + OFFSET)) * SPAN + (z + OFFSET);
 
+    const cells = new Map();
     for (let i = 0; i < CONFIG.voxelSampleCount; i++) {
       sampler.sample(p);
       const vx = Math.round(p.x / voxelSize);
       const vy = Math.round(p.y / voxelSize);
       const vz = Math.round(p.z / voxelSize);
-      const key = ((vx + OFFSET) * SPAN + (vy + OFFSET)) * SPAN + (vz + OFFSET);
-      if (!seen.has(key)) {
-        seen.add(key);
-        positions.push(vx * voxelSize, vy * voxelSize, vz * voxelSize);
-      }
+      const key = keyOf(vx, vy, vz);
+      if (!cells.has(key)) cells.set(key, [vx, vy, vz]);
     }
 
-    const boxGeometry = new RoundedBoxGeometry(
-      voxelSize, voxelSize, voxelSize,
-      CONFIG.voxelSegments,
-      voxelSize * CONFIG.voxelCornerRadius
-    );
-    const boxMaterial = new THREE.MeshStandardMaterial({
-      color: CONFIG.voxelColor,
-      roughness: CONFIG.voxelRoughness,
-      metalness: CONFIG.voxelMetalness,
-    });
+    // skip voxels that are completely surrounded: they can never be seen
+    const positions = [];
+    for (const [vx, vy, vz] of cells.values()) {
+      const hidden =
+        cells.has(keyOf(vx + 1, vy, vz)) && cells.has(keyOf(vx - 1, vy, vz)) &&
+        cells.has(keyOf(vx, vy + 1, vz)) && cells.has(keyOf(vx, vy - 1, vz)) &&
+        cells.has(keyOf(vx, vy, vz + 1)) && cells.has(keyOf(vx, vy, vz - 1));
+      if (!hidden) positions.push(vx * voxelSize, vy * voxelSize, vz * voxelSize);
+    }
+
+    const boxGeometry = new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize);
+    const boxMaterial = createVoxelMaterial(voxelSize);
 
     const count = positions.length / 3;
     const instancedMesh = new THREE.InstancedMesh(boxGeometry, boxMaterial, count);
@@ -514,6 +575,7 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, RoundedB
       instancedMesh.setMatrixAt(i, matrix);
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
+    instancedMesh.computeBoundingSphere();
     return instancedMesh;
   }
 
@@ -698,10 +760,9 @@ Promise.all([
   import('three/addons/loaders/GLTFLoader.js'),
   import('three/addons/loaders/DRACOLoader.js'),
   import('three/addons/math/MeshSurfaceSampler.js'),
-  import('three/addons/geometries/RoundedBoxGeometry.js'),
   import('three/addons/effects/AsciiEffect.js'),
-]).then(([THREE, { GLTFLoader }, { DRACOLoader }, { MeshSurfaceSampler }, { RoundedBoxGeometry }, { AsciiEffect }]) => {
-  initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, RoundedBoxGeometry, AsciiEffect });
+]).then(([THREE, { GLTFLoader }, { DRACOLoader }, { MeshSurfaceSampler }, { AsciiEffect }]) => {
+  initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler, AsciiEffect });
 }).catch(err => console.error('[face] three.js failed to load', err));
 
 // ---------------------------------------------------------
@@ -734,7 +795,7 @@ function frame(timestamp) {
   readFace();
 
   // ---- UPDATE ----
-  const cursorSettled = isTouch ? true : updateCursor(f);
+  const cursorSettled = updateCursor(f);
   const faceSettled = face.update(f);
 
   // ---- WRITE ----
