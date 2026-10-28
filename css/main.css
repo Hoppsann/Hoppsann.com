@@ -104,13 +104,33 @@ body.theme-code {
 ::view-transition-new(root) {
     z-index: 2;
     clip-path: circle(0px at var(--transition-x, 50%) var(--transition-y, 50%));
-    animation: circle-reveal 0.7s ease-in-out forwards;
+    animation: circle-reveal 0.7s cubic-bezier(0.65, 0, 0.35, 1) forwards;
 }
 
 @keyframes circle-reveal {
     to {
         clip-path: circle(var(--transition-radius, 150%) at var(--transition-x, 50%) var(--transition-y, 50%));
     }
+}
+
+/* The custom cursor gets its own layer above the reveal, so it keeps
+   following the mouse instead of being baked into the old/new snapshots. */
+#cursor {
+    view-transition-name: hoppsann-cursor;
+}
+
+::view-transition-group(hoppsann-cursor) {
+    animation: none;
+    z-index: 10;
+    mix-blend-mode: difference;
+}
+
+::view-transition-old(hoppsann-cursor) {
+    display: none;
+}
+
+::view-transition-new(hoppsann-cursor) {
+    animation: none;
 }
 
 /* =========================================

@@ -275,6 +275,14 @@ function writeContact() {
 // THEME TRANSITION (circle reveal via View Transitions API)
 // ---------------------------------------------------------
 
+// The circle only has to reveal a recolour, so everything heavy (opening
+// the gallery / projects, building DOM, compiling shaders) is kept out of
+// the 0.7 s it runs. Other scripts listen for 'hoppsann:theme' and wait
+// for `finished` before they change the layout.
+
+let currentTheme = null;
+let currentTransition = null;
+
 function applyTheme(themeName) {
   document.body.classList.remove('theme-capture', 'theme-create', 'theme-code');
   document.body.classList.add(`theme-${themeName}`);
@@ -284,22 +292,40 @@ function applyTheme(themeName) {
 }
 
 function triggerThemeTransition(clickX, clickY, themeName) {
-  // fallback for nettlesere uten støtte - bare bytt tema direkte
-  if (!document.startViewTransition) {
-    applyTheme(themeName);
-    return;
+  let finished = Promise.resolve();
+
+  if (themeName !== currentTheme) {
+    currentTheme = themeName;
+
+    // a second click while the circle is still growing: jump to the end first
+    if (currentTransition) currentTransition.skipTransition();
+
+    if (!document.startViewTransition) {
+      // fallback for nettlesere uten støtte - bare bytt tema direkte
+      applyTheme(themeName);
+    } else {
+      const maxX = Math.max(clickX, window.innerWidth - clickX);
+      const maxY = Math.max(clickY, window.innerHeight - clickY);
+      const radius = Math.sqrt(maxX * maxX + maxY * maxY);
+
+      const root = document.documentElement.style;
+      root.setProperty('--transition-x', `${clickX}px`);
+      root.setProperty('--transition-y', `${clickY}px`);
+      root.setProperty('--transition-radius', `${radius}px`);
+
+      const transition = document.startViewTransition(() => applyTheme(themeName));
+      currentTransition = transition;
+      finished = transition.finished
+        .catch(() => {})
+        .finally(() => {
+          if (currentTransition === transition) currentTransition = null;
+        });
+    }
   }
 
-  const maxX = Math.max(clickX, window.innerWidth - clickX);
-  const maxY = Math.max(clickY, window.innerHeight - clickY);
-  const radius = Math.sqrt(maxX * maxX + maxY * maxY);
-
-  const root = document.documentElement.style;
-  root.setProperty('--transition-x', `${clickX}px`);
-  root.setProperty('--transition-y', `${clickY}px`);
-  root.setProperty('--transition-radius', `${radius}px`);
-
-  document.startViewTransition(() => applyTheme(themeName));
+  document.dispatchEvent(new CustomEvent('hoppsann:theme', {
+    detail: { theme: themeName, finished },
+  }));
 }
 
 const CARD_THEMES = { card1: 'capture', card2: 'create', card3: 'code' };
@@ -604,6 +630,26 @@ function createAsciiPass(THREE, renderer, CONFIG) {
       drawAtlas(cellW, cellH);
     },
 
+    // compile everything the ascii pass uses ahead of time
+    warmUp(scene, camera) {
+      if (renderer.initRenderTarget) {
+        renderer.initRenderTarget(sceneTarget);
+        renderer.initRenderTarget(smallTarget);
+      }
+      renderer.setRenderTarget(sceneTarget);
+      renderer.compile(scene, camera);
+
+      renderer.setRenderTarget(smallTarget);
+      quad.material = downsampleMaterial;
+      renderer.compile(quadScene, quadCamera);
+
+      renderer.setRenderTarget(null);
+      quad.material = dimMaterial;
+      renderer.compile(quadScene, quadCamera);
+      quad.material = glyphMaterial;
+      renderer.compile(quadScene, quadCamera);
+    },
+
     // the caller sets up which objects are visible for each step
     renderSource(scene, camera) {
       renderer.setRenderTarget(sceneTarget);
@@ -810,6 +856,25 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler }) {
     asciiGroup.visible = s === 'code';
   }
 
+  // three only compiles shaders for visible objects, so the hidden styles
+  // would otherwise compile on their first use (= a freeze mid-transition)
+  function warmUp() {
+    if (!group) return;
+    const groups = [pointsWireGroup, solidGroup, voxelGroup, asciiGroup];
+    const was = groups.map(g => g.visible);
+
+    for (const g of groups) {
+      groups.forEach(other => { other.visible = other === g; });
+      renderer.compile(scene, camera);
+    }
+
+    // the ascii source is drawn into a render target, which needs its own variant
+    groups.forEach(g => { g.visible = g === asciiGroup; });
+    asciiPass.warmUp(scene, camera);
+
+    groups.forEach((g, i) => { g.visible = was[i]; });
+  }
+
   face.setStyle = (name) => {
     face.style = name;
     applyVisibility();
@@ -890,12 +955,13 @@ function initFace(THREE, { GLTFLoader, DRACOLoader, MeshSurfaceSampler }) {
     face.needsRender = true;
     markDirty();
 
-    // upload shaders to the GPU now instead of on the first theme click
-    renderer.compile(scene, camera);
-
-    // build the voxels while the browser is idle, not on click
+    // build the voxels and compile every style's shaders while the browser
+    // is idle, so switching style later never stalls on shader compilation
     const idle = window.requestIdleCallback || ((cb) => setTimeout(cb, 1500));
-    idle(() => ensureVoxels(), { timeout: 4000 });
+    idle(() => {
+      ensureVoxels();
+      warmUp();
+    }, { timeout: 4000 });
   }, undefined, (err) => console.error('[face]', err));
 
   // returns true when the rotation has settled

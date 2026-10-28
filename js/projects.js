@@ -258,8 +258,27 @@
   // ---- init ----
 
   document.addEventListener('DOMContentLoaded', () => {
-    document.querySelector('.card3')?.addEventListener('click', openProjects);
-    document.querySelector('.card1')?.addEventListener('click', closeProjects);
-    document.querySelector('.card2')?.addEventListener('click', closeProjects);
+    // Code opens the projects, the other themes close them. The layout only
+    // changes once the colour transition has finished, so the circle stays smooth.
+    let wantedTheme = null;
+    document.addEventListener('hoppsann:theme', async (e) => {
+      const { theme, finished } = e.detail;
+      wantedTheme = theme;
+
+      if (theme === 'code') {
+        const data = loadRepos().catch(() => {}); // start downloading right away
+        await Promise.all([data, finished]);
+        if (wantedTheme === 'code') openProjects();
+      } else {
+        await finished;
+        if (wantedTheme === theme) closeProjects();
+      }
+    });
+
+    // start fetching the repo list as soon as someone shows interest
+    const card3 = document.querySelector('.card3');
+    ['pointerenter', 'focus', 'touchstart'].forEach(type =>
+      card3?.addEventListener(type, () => loadRepos().catch(() => {}), { once: true, passive: true })
+    );
   });
 })();

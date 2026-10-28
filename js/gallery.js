@@ -166,10 +166,28 @@
   // ---- init ----
 
   document.addEventListener('DOMContentLoaded', () => {
-    // card1 opens the gallery; card2/3 close it
-    document.querySelector('.card1')?.addEventListener('click', openGallery);
-    document.querySelector('.card2')?.addEventListener('click', closeGallery);
-    document.querySelector('.card3')?.addEventListener('click', closeGallery);
+    // Capture opens the gallery, the other themes close it. The layout only
+    // changes once the colour transition has finished, so the circle stays smooth.
+    let wantedTheme = null;
+    document.addEventListener('hoppsann:theme', async (e) => {
+      const { theme, finished } = e.detail;
+      wantedTheme = theme;
+
+      if (theme === 'capture') {
+        const data = loadPhotos().catch(() => {}); // start downloading right away
+        await Promise.all([data, finished]);
+        if (wantedTheme === 'capture') openGallery();
+      } else {
+        await finished;
+        if (wantedTheme === theme) closeGallery();
+      }
+    });
+
+    // start fetching the photo list as soon as someone shows interest
+    const card1 = document.querySelector('.card1');
+    ['pointerenter', 'focus', 'touchstart'].forEach(type =>
+      card1?.addEventListener(type, () => loadPhotos().catch(() => {}), { once: true, passive: true })
+    );
 
     // one listener for the whole grid instead of one per photo
     $('gallery-grid').addEventListener('click', (e) => {
